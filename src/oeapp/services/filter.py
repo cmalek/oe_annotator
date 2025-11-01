@@ -147,6 +147,27 @@ class FilterService:
         if criteria.missing_field:
             query_parts.append(f"a.{criteria.missing_field} IS NULL")
             query_parts.append("a.pos IS NOT NULL")  # Must have annotation
+            
+            # Only filter tokens where this field is relevant for the POS type
+            field_pos_map = {
+                "verb_tense": "V",
+                "verb_mood": "V",
+                "verb_person": "V",
+                "verb_class": "V",
+                "verb_aspect": "V",
+                "verb_form": "V",
+                "prep_case": "E",
+                "pronoun_type": "R",
+                "declension": ["N", "A"],
+            }
+            
+            if criteria.missing_field in field_pos_map:
+                required_pos = field_pos_map[criteria.missing_field]
+                if isinstance(required_pos, list):
+                    pos_conditions = " OR ".join([f"a.pos = '{p}'" for p in required_pos])
+                    query_parts.append(f"({pos_conditions})")
+                else:
+                    query_parts.append(f"a.pos = '{required_pos}'")
 
         # Combine query parts
         if query_parts:

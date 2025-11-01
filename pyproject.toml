@@ -38,10 +38,11 @@ docs = [
     "sphinxcontrib-jsonglobaltoc==0.1.5",               # https://github.com/caltechads/sphinxcontrib-jsonglobaltoc
 ]
 test = [
-    "coverage>=7.6.12",                                 # https://github.com/nedbat/coveragepy
-    "django-coverage-plugin==3.1.0",                    # https://github.com/nedbat/django_coverage_plugin
-    "testfixtures~=8.0",                                # https://github.com/Simplistix/testfixtures
-    "unittest-xml-reporting==3.2.0",                    # https://github.com/xmlrunner/unittest-xml-reporting
+    "coverage>=7.6.12", # https://github.com/nedbat/coveragepy
+    "django-coverage-plugin==3.1.0", # https://github.com/nedbat/django_coverage_plugin
+    "pytest>=8.4.2",
+    "testfixtures~=8.0", # https://github.com/Simplistix/testfixtures
+    "unittest-xml-reporting==3.2.0", # https://github.com/xmlrunner/unittest-xml-reporting
 ]
 
 [project.urls]

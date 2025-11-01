@@ -70,7 +70,6 @@ class DOCXExporter:
                 # Add translation
                 if text_modern:
                     trans_para = doc.add_paragraph(text_modern)
-                    trans_para.style = "Body"
                 else:
                     # Empty translation paragraph
                     doc.add_paragraph()
@@ -122,7 +121,6 @@ class DOCXExporter:
         if not token_ids:
             # No tokens, just add plain text
             para = doc.add_paragraph(text_oe)
-            para.style = "Default"
             for run in para.runs:
                 run.italic = True
             return
@@ -158,7 +156,6 @@ class DOCXExporter:
 
         # Build paragraph with annotations
         para = doc.add_paragraph()
-        para.style = "Default"
 
         for i, token in enumerate(tokens):
             token_id = token["id"]
@@ -311,5 +308,5 @@ class DOCXExporter:
             else:
                 note_line = note_text
 
-            para = doc.add_paragraph(note_line, style="Body")
+            para = doc.add_paragraph(note_line)
             # Could add numbering here if needed
