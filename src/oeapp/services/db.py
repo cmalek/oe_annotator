@@ -1,26 +1,34 @@
 """Database service for Old English Annotator."""
 
 import sqlite3
-import json
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from types import TracebackType
 
 
 class Database:
     """Manages SQLite database connection and schema."""
 
     def __init__(self, db_path: str | Path):
-        """Initialize database connection.
+        """
+        Initialize database connection.
 
         Args:
             db_path: Path to SQLite database file
+
         """
+        #: The path to the SQLite database file.
         self.db_path = Path(db_path)
-        self.conn: Optional[sqlite3.Connection] = None
+        #: The database connection.
+        self.conn: sqlite3.Connection | None = None
         self._connect()
 
-    def _connect(self):
-        """Establish database connection with proper settings."""
+    def _connect(self) -> None:
+        """
+        Establish database connection with proper settings.
+        """
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
         # Enable foreign keys
@@ -29,8 +37,13 @@ class Database:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self._create_schema()
 
-    def _create_schema(self):
-        """Create database schema if it doesn't exist."""
+    def _create_schema(self) -> None:
+        """
+        Create database schema if it doesn't exist.
+        """
+        if not self.conn:
+            msg = "Database connection not established"
+            raise ValueError(msg)
         cursor = self.conn.cursor()
 
         # Projects table
@@ -107,7 +120,7 @@ class Database:
         """)
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_annotations_uncertain ON annotations(uncertain)
-        """)
+        """)  # noqa: E501
 
         # Notes table
         cursor.execute("""
@@ -151,7 +164,7 @@ class Database:
 
         self.conn.commit()
 
-    def close(self):
+    def close(self) -> None:
         """Close database connection."""
         if self.conn:
             self.conn.close()
@@ -161,7 +174,11 @@ class Database:
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Context manager exit."""
         self.close()
-

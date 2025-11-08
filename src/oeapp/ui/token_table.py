@@ -1,6 +1,6 @@
 """Token table UI component."""
 
-from PySide6.QtWidgets import QWidget, QTableWidget, QTableWidgetItem, QHeaderView
+from PySide6.QtWidgets import QWidget, QTableWidget, QTableWidgetItem, QHeaderView, QVBoxLayout
 from PySide6.QtCore import Qt, Signal
 
 from src.oeapp.models.token import Token

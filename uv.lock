@@ -302,6 +302,7 @@ source = { editable = "." }
 dependencies = [
     { name = "docx" },
     { name = "markdown" },
+    { name = "pygments" },
     { name = "pyside6" },
     { name = "python-docx" },
 ]
@@ -329,6 +330,7 @@ test = [
 requires-dist = [
     { name = "docx", specifier = ">=0.2.4" },
     { name = "markdown", specifier = ">=3.5.0" },
+    { name = "pygments", specifier = ">=2.19.2" },
     { name = "pyside6", specifier = ">=6.6.0" },
     { name = "python-docx", specifier = ">=1.1.0" },
 ]

@@ -7,13 +7,17 @@ Old English annotation is an iterative process. You don't need to annotate every
 ## Workflow
 
 ### Step 1: Basic POS Tagging
+
 Start by identifying the Part of Speech for each token:
+
 - Press **A** on a token
 - Select POS (N, V, A, etc.)
 - Press **Enter** to apply
 
 ### Step 2: Add Grammatical Features
+
 Later, return to tokens and add morphological details:
+
 - Select the token again
 - Press **A**
 - The modal remembers your previous POS selection
@@ -21,7 +25,9 @@ Later, return to tokens and add morphological details:
 - Press **Enter** to update
 
 ### Step 3: Refinement
+
 Continue refining as you work:
+
 - Add verb class, tense, mood
 - Specify declension types
 - Include preposition cases
@@ -29,6 +35,7 @@ Continue refining as you work:
 ## Partial Annotations
 
 All annotation fields are optional. You can:
+
 - Leave fields empty if unknown
 - Fill in only what you're certain about
 - Add more details later
@@ -36,6 +43,7 @@ All annotation fields are optional. You can:
 ## Uncertain Annotations
 
 Use the **Uncertain** checkbox when you're not confident about an annotation:
+
 - Marks the annotation with a `?` in exports
 - Helps identify areas needing review
 - Can be toggled off later when confident
@@ -43,6 +51,7 @@ Use the **Uncertain** checkbox when you're not confident about an annotation:
 ## Alternatives
 
 Use the **Alternatives** field to record multiple possible interpretations:
+
 - Example: `w2 / s3` (Weak Class II or Strong Class III)
 - Displayed as `/` separated values in exports
 - Useful for ambiguous forms
@@ -50,6 +59,7 @@ Use the **Alternatives** field to record multiple possible interpretations:
 ## Confidence Levels
 
 Set a confidence percentage (0-100):
+
 - Helps track annotation quality
 - Useful for statistical analysis
 - Can filter by confidence level later
@@ -57,6 +67,7 @@ Set a confidence percentage (0-100):
 ## TODO Markers
 
 Use the **TODO** checkbox to mark annotations needing further work:
+
 - Helps track incomplete annotations
 - Can filter to show only TODO items
 - Useful for project management
@@ -72,10 +83,10 @@ Use the **TODO** checkbox to mark annotations needing further work:
 ## Keyboard Efficiency
 
 The annotation modal remembers your last-used values for each POS type:
+
 - First noun: Fill in all fields
 - Subsequent nouns: Previous values are restored automatically
 - Adjust only what differs
 - Press **Enter** to apply quickly
 
 This makes annotating similar tokens much faster!
-
