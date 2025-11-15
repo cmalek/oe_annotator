@@ -28,6 +28,8 @@
 | - Select POS (Preposition) | **E** |
 | - Select POS (Interjection) | **I** |
 
+**Note:** When the token table has focus, pressing **A** opens the annotation dialog. Other letter keys (including **N**, **V**, etc.) can be used for incremental search to find tokens starting with that letter.
+
 ## Editing
 
 | Action | Shortcut |
@@ -47,7 +49,8 @@
 
 1. Use **J** and **K** to quickly navigate between sentences
 2. Use **→** and **←** to move between tokens within a sentence
-3. Press **A** when a token is selected to open the annotation modal
-4. In the annotation modal, use single-letter shortcuts (N, V, A, etc.) to quickly select Part of Speech
-5. Press **Enter** to apply annotations and return to editing
-6. Use **T** to quickly jump to the translation field for the current sentence
+3. Press **A** when a token is selected to open the annotation modal (works even when token table has focus)
+4. Use letter keys (like **N**, **V**, etc.) in the token table for incremental search to find tokens starting with that letter
+5. In the annotation modal, use single-letter shortcuts (N, V, A, etc.) to quickly select Part of Speech
+6. Press **Enter** to apply annotations and return to editing
+7. Use **T** to quickly jump to the translation field for the current sentence
