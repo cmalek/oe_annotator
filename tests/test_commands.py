@@ -5,8 +5,8 @@ import tempfile
 import os
 from pathlib import Path
 
-from src.oeapp.services.db import Database
-from src.oeapp.services.commands import CommandManager, AnnotateTokenCommand
+from oeapp.services.db import Database
+from oeapp.services.commands import CommandManager, AnnotateTokenCommand
 
 
 class TestCommandManager(unittest.TestCase):
@@ -251,13 +251,13 @@ class TestCommandManager(unittest.TestCase):
                   "verb_tense": None, "verb_person": None, "verb_mood": None,
                   "verb_aspect": None, "verb_form": None, "prep_case": None,
                   "uncertain": False, "alternatives_json": None, "confidence": None}
-        
+
         after1 = {"pos": "R", "gender": "m", "number": "s", "case": "n",
                   "declension": None, "pronoun_type": "d", "verb_class": None,
                   "verb_tense": None, "verb_person": None, "verb_mood": None,
                   "verb_aspect": None, "verb_form": None, "prep_case": None,
                   "uncertain": False, "alternatives_json": None, "confidence": 100}
-        
+
         after2 = {"pos": "N", "gender": "m", "number": "s", "case": "n",
                   "declension": "strong", "pronoun_type": None, "verb_class": None,
                   "verb_tense": None, "verb_person": None, "verb_mood": None,

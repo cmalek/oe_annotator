@@ -10,83 +10,83 @@ sys.modules['PySide6.QtWidgets'] = Mock()
 sys.modules['PySide6.QtCore'] = Mock()
 sys.modules['PySide6.QtGui'] = Mock()
 
-from src.oeapp.models.token import Token
-from src.oeapp.models.annotation import Annotation
+from oeapp.models.token import Token
+from oeapp.models.annotation import Annotation
 
 
 class MockComboBox:
     """Mock QComboBox for testing."""
-    
+
     def __init__(self):
         self.items = []
         self.current_index = 0
         self.editable = False
-    
+
     def addItems(self, items):
         self.items.extend(items)
-    
+
     def currentIndex(self):
         return self.current_index
-    
+
     def setCurrentIndex(self, index):
         self.current_index = index
-    
+
     def currentText(self):
         if 0 <= self.current_index < len(self.items):
             return self.items[self.current_index]
         return ""
-    
+
     def setCurrentText(self, text):
         try:
             self.current_index = self.items.index(text)
         except ValueError:
             pass
-    
+
     def setEditable(self, editable):
         self.editable = editable
 
 
 class MockCheckBox:
     """Mock QCheckBox for testing."""
-    
+
     def __init__(self):
         self.checked = False
-    
+
     def isChecked(self):
         return self.checked
-    
+
     def setChecked(self, checked):
         self.checked = checked
 
 
 class MockLineEdit:
     """Mock QLineEdit for testing."""
-    
+
     def __init__(self):
         self.text_value = ""
-    
+
     def text(self):
         return self.text_value
-    
+
     def setText(self, text):
         self.text_value = text
-    
+
     def clear(self):
         self.text_value = ""
-    
+
     def strip(self):
         return self.text_value.strip()
 
 
 class MockSlider:
     """Mock QSlider for testing."""
-    
+
     def __init__(self):
         self.value_int = 100
-    
+
     def value(self):
         return self.value_int
-    
+
     def setValue(self, value):
         self.value_int = value
 
@@ -114,7 +114,7 @@ class TestAnnotationModal(unittest.TestCase):
             case="n",
             declension="strong"
         )
-        
+
         # Verify annotation data is correct
         self.assertEqual(annotation.pos, "N")
         self.assertEqual(annotation.gender, "m")
@@ -134,7 +134,7 @@ class TestAnnotationModal(unittest.TestCase):
             number="s",
             verb_form="f"
         )
-        
+
         # Verify verb annotation fields
         self.assertEqual(annotation.pos, "V")
         self.assertEqual(annotation.verb_class, "s7")
@@ -154,7 +154,7 @@ class TestAnnotationModal(unittest.TestCase):
             number="s",
             case="n"
         )
-        
+
         # Verify pronoun annotation fields
         self.assertEqual(annotation.pos, "R")
         self.assertEqual(annotation.pronoun_type, "d")
@@ -170,7 +170,7 @@ class TestAnnotationModal(unittest.TestCase):
         number = "s"
         case = "n"
         declension = "strong"
-        
+
         # Create annotation
         annotation = Annotation(
             token_id=1,
@@ -180,7 +180,7 @@ class TestAnnotationModal(unittest.TestCase):
             case=case,
             declension=declension
         )
-        
+
         # Verify saved data
         self.assertEqual(annotation.pos, pos)
         self.assertEqual(annotation.gender, gender)
@@ -202,7 +202,7 @@ class TestAnnotationModal(unittest.TestCase):
             verb_aspect="p",
             verb_form="f"
         )
-        
+
         # Verify saved data includes all verb fields
         self.assertEqual(annotation.pos, "V")
         self.assertEqual(annotation.verb_class, "w1")
@@ -222,7 +222,7 @@ class TestAnnotationModal(unittest.TestCase):
             number="p",
             case="a"
         )
-        
+
         # Verify adjective fields
         self.assertEqual(annotation.pos, "A")
         self.assertEqual(annotation.gender, "f")
@@ -236,7 +236,7 @@ class TestAnnotationModal(unittest.TestCase):
             pos="E",
             prep_case="d"
         )
-        
+
         # Verify preposition field
         self.assertEqual(annotation.pos, "E")
         self.assertEqual(annotation.prep_case, "d")
@@ -256,7 +256,7 @@ class TestAnnotationModal(unittest.TestCase):
         self.assertIsNotNone(noun_annotation.number)
         self.assertIsNotNone(noun_annotation.case)
         self.assertIsNotNone(noun_annotation.declension)
-        
+
         # Test verb fields
         verb_annotation = Annotation(
             token_id=1,
@@ -279,7 +279,7 @@ class TestAnnotationModal(unittest.TestCase):
             alternatives_json="w2 / s3",
             confidence=75
         )
-        
+
         # Verify metadata
         self.assertTrue(annotation.uncertain)
         self.assertEqual(annotation.alternatives_json, "w2 / s3")
@@ -291,24 +291,24 @@ class TestAnnotationModal(unittest.TestCase):
         gender_combo = MockComboBox()
         gender_combo.addItems(["", "Masculine (m)", "Feminine (f)", "Neuter (n)"])
         gender_combo.setCurrentIndex(1)  # Masculine
-        
+
         number_combo = MockComboBox()
         number_combo.addItems(["", "Singular (s)", "Plural (p)"])
         number_combo.setCurrentIndex(1)  # Singular
-        
+
         case_combo = MockComboBox()
         case_combo.addItems(["", "Nominative (n)", "Accusative (a)", "Genitive (g)", "Dative (d)"])
         case_combo.setCurrentIndex(1)  # Nominative
-        
+
         # Extract values (simulating _extract_noun_values)
         gender_map = {"": None, "Masculine (m)": "m", "Feminine (f)": "f", "Neuter (n)": "n"}
         number_map = {"": None, "Singular (s)": "s", "Plural (p)": "p"}
         case_map = {"": None, "Nominative (n)": "n", "Accusative (a)": "a", "Genitive (g)": "g", "Dative (d)": "d"}
-        
+
         gender = gender_map.get(gender_combo.currentText())
         number = number_map.get(number_combo.currentText())
         case = case_map.get(case_combo.currentText())
-        
+
         # Verify extraction
         self.assertEqual(gender, "m")
         self.assertEqual(number, "s")
@@ -320,24 +320,24 @@ class TestAnnotationModal(unittest.TestCase):
         tense_combo = MockComboBox()
         tense_combo.addItems(["", "Past (p)", "Present (n)"])
         tense_combo.setCurrentIndex(2)  # Present
-        
+
         mood_combo = MockComboBox()
         mood_combo.addItems(["", "Indicative (i)", "Subjunctive (s)"])
         mood_combo.setCurrentIndex(2)  # Subjunctive
-        
+
         person_combo = MockComboBox()
         person_combo.addItems(["", "1st", "2nd", "3rd"])
         person_combo.setCurrentIndex(3)  # 3rd
-        
+
         # Extract values
         tense_map = {"": None, "Past (p)": "p", "Present (n)": "n"}
         mood_map = {"": None, "Indicative (i)": "i", "Subjunctive (s)": "s"}
         person_map = {"": None, "1st": 1, "2nd": 2, "3rd": 3}
-        
+
         tense = tense_map.get(tense_combo.currentText())
         mood = mood_map.get(mood_combo.currentText())
         person = person_map.get(person_combo.currentText())
-        
+
         # Verify extraction
         self.assertEqual(tense, "n")
         self.assertEqual(mood, "s")
@@ -355,10 +355,10 @@ class TestAnnotationModal(unittest.TestCase):
             uncertain=True,
             confidence=80
         )
-        
+
         # Clear annotation (simulating clear button)
         cleared_annotation = Annotation(token_id=1)
-        
+
         # Verify all fields are cleared
         self.assertIsNone(cleared_annotation.pos)
         self.assertIsNone(cleared_annotation.gender)
@@ -374,7 +374,7 @@ class TestAnnotationModal(unittest.TestCase):
             token_id=1,
             pos="N"
         )
-        
+
         # Verify partial annotation
         self.assertEqual(annotation.pos, "N")
         self.assertIsNone(annotation.gender)
@@ -397,7 +397,7 @@ class TestAnnotationModal(unittest.TestCase):
             alternatives_json="s2 / w1",
             confidence=60
         )
-        
+
         # Verify all fields are saved
         self.assertEqual(annotation.pos, "V")
         self.assertEqual(annotation.verb_class, "s3")

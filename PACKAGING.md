@@ -91,4 +91,3 @@ pyinstaller oe_annotator.spec --clean
 
 - macOS: Distribute the `.app` bundle or a `.dmg` file
 - Windows: Distribute the `.exe` file or create an installer using tools like Inno Setup or NSIS
-

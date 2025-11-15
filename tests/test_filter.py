@@ -4,8 +4,8 @@ import unittest
 import tempfile
 import os
 
-from src.oeapp.services.db import Database
-from src.oeapp.services.filter import FilterService, FilterCriteria
+from oeapp.services.db import Database
+from oeapp.services.filter import FilterService, FilterCriteria
 
 
 class TestFilterService(unittest.TestCase):
@@ -122,7 +122,7 @@ class TestFilterService(unittest.TestCase):
         """Test filtering tokens by POS (Noun)."""
         criteria = FilterCriteria(pos="N")
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["surface"], "cyning")
         self.assertEqual(results[0]["pos"], "N")
@@ -131,7 +131,7 @@ class TestFilterService(unittest.TestCase):
         """Test filtering tokens by POS (Verb)."""
         criteria = FilterCriteria(pos="V")
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         self.assertEqual(len(results), 2)
         surfaces = {r["surface"] for r in results}
         self.assertEqual(surfaces, {"fēoll", "wæs"})
@@ -140,7 +140,7 @@ class TestFilterService(unittest.TestCase):
         """Test filtering incomplete noun annotations."""
         criteria = FilterCriteria(pos="N", incomplete=True)
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         # Should find the noun with missing case
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["surface"], "cyning")
@@ -150,7 +150,7 @@ class TestFilterService(unittest.TestCase):
         """Test filtering incomplete verb annotations."""
         criteria = FilterCriteria(pos="V", incomplete=True)
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         # Should find the verb with missing tense
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["surface"], "wæs")
@@ -160,7 +160,7 @@ class TestFilterService(unittest.TestCase):
         """Test filtering incomplete preposition annotations."""
         criteria = FilterCriteria(pos="E", incomplete=True)
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         # Should find the preposition with missing case
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["surface"], "on")
@@ -170,7 +170,7 @@ class TestFilterService(unittest.TestCase):
         """Test filtering all incomplete annotations regardless of POS."""
         criteria = FilterCriteria(incomplete=True)
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         # Should find: incomplete noun, incomplete verb, incomplete preposition
         self.assertEqual(len(results), 3)
         surfaces = {r["surface"] for r in results}
@@ -180,7 +180,7 @@ class TestFilterService(unittest.TestCase):
         """Test filtering by uncertainty flag."""
         criteria = FilterCriteria(uncertain=True)
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         # Should find the uncertain adjective
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["surface"], "gōd")
@@ -190,7 +190,7 @@ class TestFilterService(unittest.TestCase):
         """Test filtering for certain annotations only."""
         criteria = FilterCriteria(uncertain=False)
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         # Should find all annotated tokens except the uncertain one
         surfaces = {r["surface"] for r in results}
         self.assertIn("Se", surfaces)
@@ -201,7 +201,7 @@ class TestFilterService(unittest.TestCase):
         """Test filtering by specific missing field."""
         criteria = FilterCriteria(missing_field="verb_tense")
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         # Should find verbs with missing tense
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["surface"], "wæs")
@@ -210,7 +210,7 @@ class TestFilterService(unittest.TestCase):
         """Test filtering by confidence range."""
         # Add annotations with different confidence levels
         cursor = self.db.conn.cursor()
-        
+
         # Update existing annotations with confidence
         cursor.execute(
             "UPDATE annotations SET confidence = 90 WHERE token_id = (SELECT id FROM tokens WHERE surface = 'Se')"
@@ -226,7 +226,7 @@ class TestFilterService(unittest.TestCase):
         # Filter for high confidence (>= 80)
         criteria = FilterCriteria(min_confidence=80)
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         surfaces = {r["surface"] for r in results}
         self.assertIn("Se", surfaces)  # 90
         self.assertIn("fēoll", surfaces)  # 80
@@ -237,7 +237,7 @@ class TestFilterService(unittest.TestCase):
         # Filter for incomplete nouns that are uncertain
         criteria = FilterCriteria(pos="N", incomplete=True, uncertain=False)
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         # Should find the incomplete noun that is not uncertain
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["surface"], "cyning")
@@ -245,26 +245,26 @@ class TestFilterService(unittest.TestCase):
     def test_get_statistics(self):
         """Test getting annotation statistics for a project."""
         stats = self.filter_service.get_statistics(self.project_id)
-        
+
         # 7 total tokens
         self.assertEqual(stats["total_tokens"], 7)
-        
+
         # 6 annotated tokens (all except "þǣm")
         self.assertEqual(stats["annotated_tokens"], 6)
-        
+
         # 1 unannotated token
         self.assertEqual(stats["unannotated_tokens"], 1)
-        
+
         # POS distribution
         self.assertEqual(stats["pos_distribution"]["N"], 1)
         self.assertEqual(stats["pos_distribution"]["V"], 2)
         self.assertEqual(stats["pos_distribution"]["R"], 1)
         self.assertEqual(stats["pos_distribution"]["A"], 1)
         self.assertEqual(stats["pos_distribution"]["E"], 1)
-        
+
         # 1 uncertain annotation
         self.assertEqual(stats["uncertain_count"], 1)
-        
+
         # 3 incomplete annotations
         self.assertEqual(stats["incomplete_count"], 3)
 
@@ -286,7 +286,7 @@ class TestFilterService(unittest.TestCase):
 
         criteria = FilterCriteria(pos="R", incomplete=True)
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         # Should find the pronoun with missing type
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["surface"], "hē")
@@ -309,7 +309,7 @@ class TestFilterService(unittest.TestCase):
 
         criteria = FilterCriteria(pos="A", incomplete=True)
         results = self.filter_service.find_tokens(self.project_id, criteria)
-        
+
         # Should find the adjective with missing case
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["surface"], "micel")

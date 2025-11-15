@@ -28,8 +28,8 @@ The application exports annotated Old English texts to Microsoft Word (.docx) fo
 - Italic formatting
 - Annotations appear directly on words:
 
-  - **Superscripts**: POS abbreviations, case, number, gender codes
-  - **Subscripts**: Detailed morphological information (declension, verb class, etc.)
+    - **Superscripts**: POS abbreviations, case, number, gender codes
+    - **Subscripts**: Detailed morphological information (declension, verb class, etc.)
 
 #### Modern English Translation
 

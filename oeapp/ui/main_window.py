@@ -1,7 +1,7 @@
 """Main application window."""
 
-import sys
 from pathlib import Path
+from typing import cast
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
@@ -19,7 +20,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from oeapp.exc import AlreadyExists
 from oeapp.models.annotation import Annotation
+from oeapp.models.project import Project
+from oeapp.models.token import Token
 from oeapp.services.autosave import AutosaveService
 from oeapp.services.commands import CommandManager
 from oeapp.services.db import Database
@@ -29,14 +34,11 @@ from oeapp.ui.filter_dialog import FilterDialog
 from oeapp.ui.help_dialog import HelpDialog
 from oeapp.ui.sentence_card import SentenceCard
 
-from oeapp.models.project import Project
-from oeapp.models.token import Token
-
 
 class MainMenu:
     """Main application menu."""
 
-    def __init__(self, main_window: QMainWindow) -> None:
+    def __init__(self, main_window: MainWindow) -> None:
         """
         Initialize main menu.
 
@@ -65,33 +67,33 @@ class MainMenu:
         """
         file_menu = self.menu.addMenu("&File")
 
-        new_action = QAction("&New Project...", self)
+        new_action = QAction("&New Project...", file_menu)
         new_action.setShortcut(QKeySequence("Ctrl+N"))
-        new_action.triggered.connect(self.new_project)
+        new_action.triggered.connect(self.main_window.new_project)
         file_menu.addAction(new_action)
 
-        open_action = QAction("&Open Project...", self)
+        open_action = QAction("&Open Project...", file_menu)
         open_action.setShortcut(QKeySequence("Ctrl+O"))
-        open_action.triggered.connect(self.open_project)
+        open_action.triggered.connect(self.main_window.open_project)
         file_menu.addAction(open_action)
 
         file_menu.addSeparator()
 
-        save_action = QAction("&Save", self)
+        save_action = QAction("&Save", file_menu)
         save_action.setShortcut(QKeySequence("Ctrl+S"))
-        save_action.triggered.connect(self.save_project)
+        save_action.triggered.connect(self.main_window.save_project)
         file_menu.addAction(save_action)
 
-        export_action = QAction("&Export...", self)
+        export_action = QAction("&Export...", file_menu)
         export_action.setShortcut(QKeySequence("Ctrl+E"))
-        export_action.triggered.connect(self.export_project)
+        export_action.triggered.connect(self.main_window.export_project)
         file_menu.addAction(export_action)
 
         file_menu.addSeparator()
 
-        filter_action = QAction("&Filter Annotations...", self)
+        filter_action = QAction("&Filter Annotations...", file_menu)
         filter_action.setShortcut(QKeySequence("Ctrl+F"))
-        filter_action.triggered.connect(self.show_filter_dialog)
+        filter_action.triggered.connect(self.main_window.show_filter_dialog)
         file_menu.addAction(filter_action)
 
     def add_help_menu(self) -> None:
@@ -105,9 +107,9 @@ class MainMenu:
         """
         help_menu = self.menu.addMenu("&Help")
 
-        help_action = QAction("&Help", self)
+        help_action = QAction("&Help", help_menu)
         help_action.setShortcut(QKeySequence("F1"))
-        help_action.triggered.connect(self.main_window.show_help)
+        help_action.triggered.connect(lambda: self.main_window.show_help())
         help_menu.addAction(help_action)
 
     def build(self) -> None:
@@ -120,7 +122,6 @@ class MainWindow(QMainWindow):
     """Main application window."""
 
     def __init__(self) -> None:
-        """Initialize main window."""
         super().__init__()
         #: Datbase
         self.db: Database = Database()
@@ -139,7 +140,9 @@ class MainWindow(QMainWindow):
         self.build()
 
     def _setup_main_window(self) -> None:
-        """Set up the main window."""
+        """
+        Set up the main window.
+        """
         self.setWindowTitle("Old English Annotator")
         self.setGeometry(100, 100, 1200, 800)
         # Central widget with scroll area
@@ -169,7 +172,14 @@ class MainWindow(QMainWindow):
         menu.build()
 
     def build(self) -> None:
-        """Build the main window."""
+        """
+        Build the main window.
+
+        - Setup the main window.
+        - Setup the main menu.
+        - Setup global shortcuts.
+
+        """
         self._setup_main_window()
         self._setup_main_menu()
         self._setup_global_shortcuts()
@@ -319,14 +329,15 @@ class MainWindow(QMainWindow):
             card: Sentence card to load annotations for
 
         """
-        cursor = self.db.cursor()
+        cursor = self.db.cursor
         annotations = {}
         for token in card.tokens:
             cursor.execute("SELECT * FROM annotations WHERE token_id = ?", (token.id,))
             row = cursor.fetchone()
             if row:
                 ann = Annotation(
-                    token_id=token.id,
+                    db=self.db,
+                    token_id=cast("int", token.id),
                     pos=row["pos"],
                     gender=row["gender"],
                     number=row["number"],
@@ -345,7 +356,7 @@ class MainWindow(QMainWindow):
                     confidence=row["confidence"],
                 )
                 annotations[token.id] = ann
-        card.set_tokens(card.tokens, annotations)
+        card.set_tokens(card.tokens)
 
     def new_project(self) -> None:
         """
@@ -358,6 +369,11 @@ class MainWindow(QMainWindow):
         dialog = QDialog(self)
         dialog.setWindowTitle("New Project")
         layout = QVBoxLayout(dialog)
+
+        title_edit = QLineEdit(self)
+        title_edit.setPlaceholderText("Enter project title...")
+        layout.addWidget(QLabel("Project Title:"))
+        layout.addWidget(title_edit)
 
         text_edit = QTextEdit()
         text_edit.setPlaceholderText("Paste Old English text here...")
@@ -374,8 +390,19 @@ class MainWindow(QMainWindow):
 
         if dialog.exec():
             text = text_edit.toPlainText()
-            if text.strip():
-                self._create_project_from_text(text)
+            title = title_edit.text()
+            if text.strip() and title.strip():
+                try:
+                    self._create_project_from_text(text, title)
+                except AlreadyExists:
+                    QMessageBox.warning(
+                        self,
+                        "Error",
+                        (
+                            f'Project with title "{title!s}" already exists. Please '
+                            "choose a different title or delete the existing project."
+                        ),
+                    )
 
     def _configure_project(self, project: Project) -> None:
         """
@@ -394,7 +421,7 @@ class MainWindow(QMainWindow):
 
         # Clear existing content
         for i in reversed(range(self.content_layout.count())):
-            self.content_layout.itemAt(i).widget().setParent(None)
+            self.content_layout.itemAt(i).widget().setParent(None)  # type: ignore[union-attr]
 
         self.sentence_cards = []
         for sentence in project.sentences:
@@ -407,7 +434,7 @@ class MainWindow(QMainWindow):
             self.sentence_cards.append(card)
             self.content_layout.addWidget(card)
 
-    def _create_project_from_text(self, text: str) -> None:
+    def _create_project_from_text(self, text: str, title: str) -> None:
         """
         Create a new project from the text, split into sentences, split
         sentences into tokens, and create sentence cards.
@@ -417,10 +444,11 @@ class MainWindow(QMainWindow):
 
         Args:
             text: Old English text to process
+            title: Project title
 
         """
         # Create project in the shared database
-        project = Project.create(self.db, text)
+        project = Project.create(self.db, text, title)
         self._configure_project(project)
         self.setWindowTitle(f"Old English Annotator - {project.name}")
         self.statusBar().showMessage("Project created", 2000)
@@ -446,6 +474,7 @@ class MainWindow(QMainWindow):
         Perform autosave operation.
         """
         assert self.db is not None, "Database not initialized"  # noqa: S101
+        assert self.current_project_id is not None, "Current project ID not set"  # noqa: S101
         project = Project.get(self.db, self.current_project_id)
         project.save()
         self.statusBar().showMessage("Saved", 2000)
@@ -459,7 +488,7 @@ class MainWindow(QMainWindow):
         - If the user selects a project, load it by ID.
         """
         # Get all projects from the database
-        projects = Project.list_all(self.db)
+        projects = Project.list(self.db)
         if not projects:
             QMessageBox.information(
                 self,
@@ -581,7 +610,11 @@ class MainWindow(QMainWindow):
             )
             return
 
-        dialog = FilterDialog(self.filter_service, self.current_project_id, parent=self)
+        dialog = FilterDialog(
+            cast("FilterService", self.filter_service),
+            self.current_project_id,
+            parent=self,
+        )
         dialog.token_selected.connect(self._navigate_to_token)
         dialog.exec()
 

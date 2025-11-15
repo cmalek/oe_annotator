@@ -155,9 +155,9 @@ These abbreviations appear in exports:
 ## Compact Export Format
 
 In DOCX exports, annotations use compact formats:
+
 - `dat1` = Dative singular
 - `acc1` = Accusative singular
 - `nom.pl` = Nominative plural
 - `w2` = Weak Class II
 - `s3` = Strong Class III
-

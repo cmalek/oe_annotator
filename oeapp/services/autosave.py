@@ -1,21 +1,26 @@
 """Autosave service with debounced writes."""
 
 import threading
-from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class AutosaveService:
-    """Service for debounced autosave operations."""
+    """
+    Service for debounced autosave operations.
 
-    def __init__(self, save_callback: Callable[[], None], debounce_ms: int = 500):
-        """
-        Initialize autosave service.
+    Args:
+        save_callback: Function to call when saving
+        debounce_ms: Debounce delay in milliseconds
 
-        Args:
-            save_callback: Function to call when saving
-            debounce_ms: Debounce delay in milliseconds
+    """
 
-        """
+    def __init__(
+        self, save_callback: Callable[[], None], debounce_ms: int = 500
+    ) -> None:
+        #: The function to call when saving.
         self.save_callback = save_callback
         #: The debounce delay in seconds.j
         self.debounce_ms = debounce_ms / 1000.0  # Convert to seconds
@@ -42,6 +47,12 @@ class AutosaveService:
     def _save(self) -> None:
         """
         Execute the save callback.
+
+        This method is either called manually by the user via the :meth:`save_now`
+        method or called by the autosave timer when the debounce delay has
+        elapsed. It checks if there is a pending autosave and if so, calls the
+        save callback. If the save callback raises an exception, it is caught
+        and the pending autosave is set to False.
         """
         with self._lock:
             if self._pending:
@@ -54,7 +65,9 @@ class AutosaveService:
 
     def save_now(self) -> None:
         """
-        Force immediate save (bypasses debounce).
+        Force immediate save (bypasses debounce), meaning the autosave timer is
+        cancelled and the save callback is called immediately.
+
         """
         with self._lock:
             if self._timer:
@@ -66,8 +79,11 @@ class AutosaveService:
         except Exception as e:
             print(f"Save error: {e}")
 
-    def cancel(self):
-        """Cancel pending autosave."""
+    def cancel(self) -> None:
+        """
+        Cancel pending autosave, meaning the autosave timer is cancelled and the
+        save callback is not called.
+        """
         with self._lock:
             if self._timer:
                 self._timer.cancel()

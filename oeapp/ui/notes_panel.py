@@ -4,8 +4,13 @@ from PySide6.QtWidgets import QWidget
 
 
 class NotesPanel(QWidget):
-    """Widget displaying notes panel."""
+    """
+    Widget displaying notes panel.
+
+    Args:
+        parent: Parent widget
+
+    """
 
     def __init__(self, parent: QWidget | None = None):  # noqa: ARG002
-        """Initialize notes panel."""
         super().__init__()

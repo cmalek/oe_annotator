@@ -1,8 +1,8 @@
 """Token table UI component."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QHeaderView,
     QTableWidget,
@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from oeapp.models.token import Token
 
 if TYPE_CHECKING:
@@ -140,7 +141,7 @@ class TokenTable(QWidget):
             # Word
             self.table.setItem(row, 0, QTableWidgetItem(token.surface))
             # Get annotation for this token
-            annotation = self.annotations.get(token.id)
+            annotation = self.annotations.get(cast("int", token.id))
             if annotation:
                 self.table.setItem(row, 1, QTableWidgetItem(annotation.pos or "—"))
                 self.table.setItem(row, 2, QTableWidgetItem(annotation.gender or "—"))

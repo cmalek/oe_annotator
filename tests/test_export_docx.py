@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 from docx import Document
 
-from src.oeapp.services.db import Database
-from src.oeapp.services.export_docx import DOCXExporter
-from src.oeapp.models.annotation import Annotation
+from oeapp.services.db import Database
+from oeapp.services.export_docx import DOCXExporter
+from oeapp.models.annotation import Annotation
 
 
 class TestDOCXExporter(unittest.TestCase):
@@ -78,7 +78,7 @@ class TestDOCXExporter(unittest.TestCase):
 
         # Token 3: Verb, strong class 7, past tense, indicative, 3rd person, singular
         cursor.execute(
-            """INSERT INTO annotations (token_id, pos, verb_class, verb_tense, verb_mood, 
+            """INSERT INTO annotations (token_id, pos, verb_class, verb_tense, verb_mood,
                                        verb_person, number, verb_form, confidence)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (token_id_3, "V", "s7", "p", "i", 3, "s", "f", 100)
@@ -146,7 +146,7 @@ class TestDOCXExporter(unittest.TestCase):
 
         # Create uncertain annotation
         cursor.execute(
-            """INSERT INTO annotations (token_id, pos, gender, number, "case", pronoun_type, 
+            """INSERT INTO annotations (token_id, pos, gender, number, "case", pronoun_type,
                                        uncertain, alternatives_json)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (token_id, "R", "n", "s", "a", "d", 1, "n")
@@ -165,7 +165,7 @@ class TestDOCXExporter(unittest.TestCase):
             # Read document and check for uncertainty marker
             doc = Document(str(output_path))
             text_content = "\n".join([para.text for para in doc.paragraphs])
-            
+
             # Should contain '?' for uncertain annotation
             self.assertIn("?", text_content, "Uncertain annotations should be marked with '?'")
 

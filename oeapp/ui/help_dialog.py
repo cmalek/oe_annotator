@@ -35,12 +35,19 @@ def get_resource_path(relative_path: str) -> Path:
         base_path = Path(sys._MEIPASS)
     else:
         # Running in development
-        base_path = Path(__file__).parent.parent.parent.parent
+        base_path = Path(__file__).parent
     return base_path / relative_path
 
 
 class HelpDialog(QDialog):
-    """Help dialog displaying documentation."""
+    """
+    Help dialog displaying documentation.
+
+    Args:
+        topic: Optional topic to display initially
+        parent: Parent widget
+
+    """
 
     #: Help topics mapping
     TOPICS: Final[dict[str, str]] = {
@@ -53,24 +60,34 @@ class HelpDialog(QDialog):
     }
 
     def __init__(self, topic: str | None = None, parent: QWidget | None = None) -> None:
-        """
-        Initialize help dialog.
-
-        Keyword Args:
-            topic: Optional topic to display initially
-            parent: Parent widget
-
-        """
         super().__init__(parent)
+        #: The directory containing the help files.
         self.help_dir = get_resource_path("help")
+        # Set up the UI.
         self._setup_ui()
+        # If the topic is valid, load the topic.
         if topic and topic in self.TOPICS:
             self._load_topic(topic)
         else:
+            # If the topic is not valid, load the default topic.
             self._load_topic("Keybindings")
 
     def _setup_ui(self) -> None:
-        """Set up the UI layout."""
+        """
+        Set up the UI layout.
+
+        This means:
+
+        - Setting the window title
+        - Setting the window geometry
+        - Setting the minimum size
+        - Creating a vertical layout for the dialog
+        - Adding a header label
+        - Adding a splitter for the topic list and content
+        - Adding a topic list
+
+        """
+        # Set the window title.
         self.setWindowTitle("Old English Annotator - Help")
         self.setGeometry(100, 100, 900, 700)
         self.setMinimumSize(QSize(800, 600))
@@ -115,6 +132,8 @@ class HelpDialog(QDialog):
         """
         Handle topic selection change.
 
+        - If the current topic is valid, load the topic.
+
         Args:
             current: The current topic item
             previous: The previous topic item
@@ -139,10 +158,12 @@ class HelpDialog(QDialog):
 
         """
         if topic_name not in self.TOPICS:
+            # If the topic is not valid, do nothing.
             return
 
         filename = self.TOPICS[topic_name]
         filepath = self.help_dir / filename
+        print("help dialog filepath:", filepath)
 
         if not filepath.exists():
             self.content_view.setHtml(

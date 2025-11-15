@@ -1,30 +1,29 @@
 """Sentence card UI component."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
-from src.oeapp.models.annotation import Annotation
-from src.oeapp.services.commands import (
+
+from oeapp.services.commands import (
     AnnotateTokenCommand,
     CommandManager,
     EditSentenceCommand,
 )
-from src.oeapp.ui.annotation_modal import AnnotationModal
-from src.oeapp.ui.token_table import TokenTable
+from oeapp.ui.annotation_modal import AnnotationModal
+from oeapp.ui.token_table import TokenTable
 
 if TYPE_CHECKING:
-    from src.oeapp.models.sentence import Sentence
-    from src.oeapp.models.token import Token
-
+    from oeapp.models.annotation import Annotation
+    from oeapp.models.sentence import Sentence
+    from oeapp.models.token import Token
     from oeapp.services.db import Database
 
 
@@ -54,8 +53,10 @@ class SentenceCard(QWidget):
         self.db = db
         self.command_manager = command_manager
         self.token_table = TokenTable()
-        self.tokens: list[Token] = []
-        self.annotations: dict[int, Annotation] = {}
+        self.tokens: list[Token] = sentence.tokens
+        self.annotations: dict[int, Annotation] = {
+            cast("int", token.id): token.annotation for token in self.tokens
+        }
         self._setup_ui()
         self._setup_shortcuts()
 
@@ -103,7 +104,7 @@ class SentenceCard(QWidget):
         # Header with sentence number and actions
         header_layout = QHBoxLayout()
         self.sentence_number_label = QLabel(f"[{self.sentence.display_order}]")
-        self.sentence_number_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        self.sentence_number_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
         header_layout.addWidget(self.sentence_number_label)
 
         # Action buttons
@@ -118,23 +119,24 @@ class SentenceCard(QWidget):
 
         # Old English text line (editable)
         oe_label = QLabel("Old English:")
-        oe_label.setFont(QFont("Arial", 10))
+        oe_label.setFont(QFont("Arial", 14))
         layout.addWidget(oe_label)
 
-        self.oe_text_edit = QLineEdit()
+        self.oe_text_edit = QTextEdit()
         self.oe_text_edit.setText(self.sentence.text_oe)
-        self.oe_text_edit.setFont(QFont("Times New Roman", 14))
+        self.oe_text_edit.setFont(QFont("Times New Roman", 18))
         self.oe_text_edit.setPlaceholderText("Enter Old English text...")
-        self.oe_text_edit.editingFinished.connect(self._on_oe_text_changed)
+        self.oe_text_edit.textChanged.connect(self._on_oe_text_changed)
         layout.addWidget(self.oe_text_edit)
 
         # Token annotation grid
         self.token_table.annotation_requested.connect(self._open_annotation_modal)
         layout.addWidget(self.token_table)
+        self.set_tokens(self.tokens)
 
         # Modern English translation
         translation_label = QLabel("Modern English Translation:")
-        translation_label.setFont(QFont("Arial", 10))
+        translation_label.setFont(QFont("Arial", 18))
         layout.addWidget(translation_label)
 
         self.translation_edit = QTextEdit()
@@ -155,25 +157,21 @@ class SentenceCard(QWidget):
 
         layout.addStretch()
 
-    def set_tokens(
-        self, tokens: list[Token], annotations: dict[int, Annotation] | None = None
-    ):
+    def set_tokens(self, tokens: list[Token]):
         """
-        Set tokens for this sentence card.
+        Set tokens for this sentence card.  This will also load the annotations
+        for the tokens.
 
         Args:
             tokens: List of tokens
 
-        Keyword Args:
-            annotations: Dictionary mapping token_id to Annotation
-
         """
-        self.tokens = tokens
-        self.annotations = annotations or {}
-        self.token_table.set_tokens(tokens, annotations)
+        self.token_table.set_tokens(tokens, self.annotations)
 
     def _open_annotation_modal(self) -> None:
-        """Open annotation modal for selected token."""
+        """
+        Open annotation modal for selected token.
+        """
         token: Token | None = self.token_table.get_selected_token()
         if not token:
             # Select first token if none selected
@@ -183,13 +181,8 @@ class SentenceCard(QWidget):
             else:
                 return
 
-        # Get existing annotation
-        annotation = self.annotations.get(token.id)
-        if not annotation:
-            annotation = Annotation(token_id=token.id)
-
         # Open modal
-        modal = AnnotationModal(token, annotation, self)
+        modal = AnnotationModal(token, token.annotation, self)
         modal.annotation_applied.connect(self._on_annotation_applied)
         modal.exec()
 

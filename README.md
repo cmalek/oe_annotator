@@ -21,7 +21,7 @@ A desktop application to assist in translation from Old English/Anglo Saxon to M
 uv sync
 
 # Run the application
-python -m src.oeapp.main
+python -m oeapp.main
 ```
 
 ### Building Standalone Applications

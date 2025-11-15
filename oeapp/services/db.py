@@ -1,49 +1,99 @@
 """Database service for Old English Annotator."""
 
 import sqlite3
+import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, cast
 
 if TYPE_CHECKING:
     from types import TracebackType
 
 
 class Database:
-    """Manages SQLite database connection and schema."""
+    """
+    Manages SQLite database connection and schema.
+    """
 
-    def __init__(self, db_path: str | Path):
-        """
-        Initialize database connection.
+    #: The default database name.
+    DEFAULT_DB_NAME: Final[str] = "default.db"
 
-        Args:
-            db_path: Path to SQLite database file
-
-        """
+    def __init__(self) -> None:
         #: The path to the SQLite database file.
-        self.db_path = Path(db_path)
+        self.db_path = self._get_project_db_path()
         #: The database connection.
-        self.conn: sqlite3.Connection | None = None
+        self._conn: sqlite3.Connection | None = None
+        # Connect to the database
         self._connect()
+
+    @property
+    def conn(self) -> sqlite3.Connection:
+        """
+        Get the database connection.
+        """
+        if not self._conn:
+            self._connect()
+        return cast("sqlite3.Connection", self._conn)
+
+    @property
+    def cursor(self) -> sqlite3.Cursor:
+        """
+        Get the database cursor.
+        """
+        return self.conn.cursor()
+
+    def _get_project_db_path(self) -> Path:
+        """
+        Get the path to the project database.
+
+        - On Windows, the database is created in the user's
+            ``AppData/Local/oe_annotator/projects`` directory.
+        - On macOS, the database is created in the user's
+            ``~/Library/Application Support/oe_annotator/projects`` directory.
+        - On Linux, the database is created in the user's
+            ``~/.config/oe_annotator/projects`` directory.
+        - If the platform is not supported, raise a ValueError.
+
+        Returns:
+            Path to the database file
+
+        """
+        if sys.platform not in ["win32", "darwin", "linux"]:
+            msg = f"Unsupported platform: {sys.platform}"
+            raise ValueError(msg)
+        if sys.platform == "win32":
+            db_path = Path.home() / "AppData" / "Local" / "oe_annotator" / "projects"
+        elif sys.platform == "darwin":
+            db_path = (
+                Path.home()
+                / "Library"
+                / "Application Support"
+                / "oe_annotator"
+                / "projects"
+            )
+        elif sys.platform == "linux":
+            db_path = Path.home() / ".config" / "oe_annotator" / "projects"
+        db_path.mkdir(parents=True, exist_ok=True)
+        return db_path / "default.db"
 
     def _connect(self) -> None:
         """
-        Establish database connection with proper settings.
+        Establish database connection with proper settings, and
+        save it in :attr:`_conn`.
+
         """
-        self.conn = sqlite3.connect(str(self.db_path))
-        self.conn.row_factory = sqlite3.Row
+        self.db_path.touch(exist_ok=True)  # Create the file if it doesn't exist
+        self._conn = sqlite3.connect(str(self.db_path))
+        self._conn.row_factory = sqlite3.Row
         # Enable foreign keys
-        self.conn.execute("PRAGMA foreign_keys=ON")
+        self._conn.execute("PRAGMA foreign_keys=ON")
         # Enable WAL mode for concurrent reads
-        self.conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA journal_mode=WAL")
         self._create_schema()
 
     def _create_schema(self) -> None:
         """
         Create database schema if it doesn't exist.
         """
-        if not self.conn:
-            msg = "Database connection not established"
-            raise ValueError(msg)
         cursor = self.conn.cursor()
 
         # Projects table
@@ -83,6 +133,7 @@ class Database:
                 surface TEXT NOT NULL,
                 lemma TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(sentence_id, order_index)
             )
         """)
@@ -164,11 +215,15 @@ class Database:
 
         self.conn.commit()
 
+    def commit(self) -> None:
+        """Commit the database transaction."""
+        self.conn.commit()
+
     def close(self) -> None:
         """Close database connection."""
         if self.conn:
             self.conn.close()
-            self.conn = None
+            self._conn = None
 
     def __enter__(self):
         """Context manager entry."""
