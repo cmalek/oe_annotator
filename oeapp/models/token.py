@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import TYPE_CHECKING, ClassVar, Final, cast
 
 from oeapp.exc import DoesNotExist
 from oeapp.models.annotation import Annotation
@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 class Token:
     """Represents a tokenized word in a sentence."""
 
+    #: The Old English characters. These are the characters that are allowed in
+    #: the surface form of a token beyond the basic Latin characters.
+    OE_CHARS: ClassVar[str] = "þÞðÐæǣÆǢȝġĠċĊāĀȳȲēĒīĪūŪōŌū"
     #: The value of the order index that indicates a token is no longer in the
     #: sentence.
     NO_ORDER_INDEX: ClassVar[int] = -1
@@ -235,9 +238,14 @@ class Token:
             if not word:
                 continue
             # Split punctuation from words
-            # Match word characters (including Old English chars) and
-            # punctuation separately
-            parts = re.findall(r"[\wþðæȝġ]+|[.,;:!?\-—]+", word)
+            # Match word characters (including Old English chars) and punctuation
+            # separately
+            parts = re.findall(rf"[\w{re.escape(cls.OE_CHARS)}]+|[.,;:!?\-—]+", word)
+            parts = [
+                part
+                for part in parts
+                if part not in [",", ";", ":", "!", "?", "-", "—"]
+            ]
             tokens.extend(parts)
         return tokens
 
