@@ -30,6 +30,8 @@ class Annotation:
     case: str | None = None  # n, a, g, d, i (reserved keyword, use "case" in SQL)
     #: The declension.
     declension: str | None = None
+    #: The article type.
+    article_type: str | None = None  # d, i, p, D
     #: The pronoun type.
     pronoun_type: str | None = None  # p, r, d, i
     #: The verb class.
@@ -84,7 +86,7 @@ class Annotation:
         """
         cursor = self.db.cursor
         cursor.execute(
-            """UPDATE annotations SET pos = ?, gender = ?, number = ?, "case" = ?, declension = ?, pronoun_type = ?, verb_class = ?, verb_tense = ?, verb_person = ?, verb_mood = ?, verb_aspect = ?, verb_form = ?, prep_case = ?, uncertain = ?, alternatives_json = ?, confidence = ?, updated_at = CURRENT_TIMESTAMP WHERE token_id = ?
+            """UPDATE annotations SET pos = ?, gender = ?, number = ?, "case" = ?, declension = ?, article_type = ?, pronoun_type = ?, verb_class = ?, verb_tense = ?, verb_person = ?, verb_mood = ?, verb_aspect = ?, verb_form = ?, prep_case = ?, uncertain = ?, alternatives_json = ?, confidence = ?, updated_at = CURRENT_TIMESTAMP WHERE token_id = ?
             """,  # noqa: E501
             (
                 self.pos,
@@ -92,6 +94,7 @@ class Annotation:
                 self.number,
                 self.case,
                 self.declension,
+                self.article_type,
                 self.pronoun_type,
                 self.verb_class,
                 self.verb_tense,

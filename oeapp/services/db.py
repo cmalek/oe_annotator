@@ -152,6 +152,7 @@ class Database:
                 "case" TEXT CHECK("case" IN ('n','a','g','d','i')),
                 declension TEXT,
                 pronoun_type TEXT CHECK(pronoun_type IN ('p','r','d','i')),
+                article_type TEXT CHECK(article_type IN ('d','i','p','D')),
                 verb_class TEXT,
                 verb_tense TEXT CHECK(verb_tense IN ('p','n')),
                 verb_person INTEGER CHECK(verb_person IN (1,2,3)),
