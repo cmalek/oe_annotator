@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     import builtins
     from datetime import datetime
 
+    from oeapp.models.sentence import Sentence
     from oeapp.services.db import Database
 
 
@@ -34,6 +35,15 @@ class Note:
     created_at: datetime | None = None
     #: The date and time the note was last updated.
     updated_at: datetime | None = None
+
+    @property
+    def sentence(self) -> Sentence:
+        """
+        Get the sentence this note belongs to.
+        """
+        from .sentence import Sentence  # noqa: PLC0415
+
+        return Sentence.get(self.db, self.sentence_id)
 
     @classmethod
     def list(cls, db: Database, sentence_id: int) -> builtins.list[Note]:

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     import builtins
     from datetime import datetime
 
+    from oeapp.models.note import Note
     from oeapp.services.db import Database
 
 
@@ -34,6 +35,18 @@ class Sentence:
     updated_at: datetime | None = None
     # The tokens in the sentence.
     tokens: list[Token] = field(default_factory=list)
+
+    @property
+    def notes(self) -> list[Note]:
+        """
+        Get the notes for the sentence.
+        """
+        from .note import Note  # noqa: PLC0415
+
+        if not self.id:
+            msg = "Sentence has not yet been saved to the database"
+            raise ValueError(msg)
+        return Note.list(self.db, self.id)
 
     @classmethod
     def list(cls, db: Database, project_id: int) -> builtins.list[Sentence]:
