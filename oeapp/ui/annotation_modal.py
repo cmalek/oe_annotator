@@ -45,6 +45,10 @@ class AnnotationModal(QDialog):
     PART_OF_SPEECH_REVERSE_MAP: Final[dict[str, str]] = {
         v: k for k, v in PART_OF_SPEECH_MAP.items() if v is not None
     }
+    #: A Reverse lookup map for part of speech long form to code.
+    INT_PART_OF_SPEECH_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(PART_OF_SPEECH_MAP.keys()) if k is not None
+    }
 
     #: A lookup map for article type codes to their long form.
     ARTICLE_TYPE_MAP: Final[dict[str | None, str]] = {
@@ -54,6 +58,9 @@ class AnnotationModal(QDialog):
         "p": "Possessive (p)",
         "D": "Demonstrative (D)",
     }
+    ARTICLE_TYPE_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(ARTICLE_TYPE_MAP.keys()) if k is not None
+    }
 
     #: A lookup map for gender codes to their long form.
     GENDER_MAP: Final[dict[str | None, str]] = {
@@ -62,6 +69,9 @@ class AnnotationModal(QDialog):
         "f": "Feminine (f)",
         "n": "Neuter (n)",
     }
+    GENDER_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(GENDER_MAP.keys()) if k is not None
+    }
 
     #: A lookup map for number codes to their long form.
     NUMBER_MAP: Final[dict[str | None, str]] = {
@@ -69,15 +79,21 @@ class AnnotationModal(QDialog):
         "s": "Singular (s)",
         "p": "Plural (p)",
     }
+    NUMBER_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(NUMBER_MAP.keys()) if k is not None
+    }
 
     #: A lookup map for case codes to their long form.
     CASE_MAP: Final[dict[str | None, str]] = {
         None: "",
-        "Nominative (n)": "n",
+        "n": "Nominative (n)",
         "a": "Accusative (a)",
         "g": "Genitive (g)",
         "d": "Dative (d)",
         "i": "Instrumental (i)",
+    }
+    CASE_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(CASE_MAP.keys()) if k is not None
     }
 
     #: A lookup map for declension codes to their long form.
@@ -90,8 +106,11 @@ class AnnotationModal(QDialog):
         "u": "u-stem (u)",
         "ja": "ja-stem (ja)",
         "jo": "jo-stem (jo)",
-        "wa": "wa-stem (wo)",
+        "wa": "wa-stem (wa)",
         "wo": "wo-stem (wo)",
+    }
+    DECLENSION_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(DECLENSION_MAP.values()) if k is not None
     }
 
     #: A lookup map for verb class codes to their long form.
@@ -108,12 +127,18 @@ class AnnotationModal(QDialog):
         "s6": "Strong Class 6 (s6)",
         "s7": "Strong Class 7 (s7)",
     }
+    VERB_CLASS_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(VERB_CLASS_MAP.keys()) if k is not None
+    }
 
     #: A lookup map for verb tense codes to their long form.
     VERB_TENSE_MAP: Final[dict[str | None, str]] = {
         None: "",
         "Past (p)": "p",
         "Present (n)": "n",
+    }
+    VERB_TENSE_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(VERB_TENSE_MAP.keys()) if k is not None
     }
 
     #: A lookup map for verb mood codes to their long form.
@@ -123,6 +148,9 @@ class AnnotationModal(QDialog):
         "s": "Subjunctive (s)",
         "imp": "Imperative (imp)",
     }
+    VERB_MOOD_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(VERB_MOOD_MAP.keys()) if k is not None
+    }
 
     #: A lookup map for verb person codes to their long form.
     VERB_PERSON_MAP: Final[dict[int | None, str]] = {
@@ -130,6 +158,9 @@ class AnnotationModal(QDialog):
         1: "1st",
         2: "2nd",
         3: "3rd",
+    }
+    VERB_PERSON_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(VERB_PERSON_MAP.keys()) if k is not None
     }
 
     #: A lookup map for verb aspect codes to their long form.
@@ -139,6 +170,9 @@ class AnnotationModal(QDialog):
         "prg": "Progressive (prg)",
         "gn": "Gnomic (gn)",
     }
+    VERB_ASPECT_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(VERB_ASPECT_MAP.keys()) if k is not None
+    }
 
     #: A lookup map for verb form codes to their long form.
     VERB_FORM_MAP: Final[dict[str | None, str]] = {
@@ -146,6 +180,9 @@ class AnnotationModal(QDialog):
         "f": "Finite (f)",
         "i": "Infinitive (i)",
         "p": "Participle (p)",
+    }
+    VERB_FORM_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(VERB_FORM_MAP.keys()) if k is not None
     }
 
     #: A lookup map for pronoun type codes to their long form.
@@ -156,6 +193,9 @@ class AnnotationModal(QDialog):
         "d": "Demonstrative (d)",
         "i": "Interrogative (i)",
     }
+    PRONOUN_TYPE_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(PRONOUN_TYPE_MAP.keys()) if k is not None
+    }
 
     #: A lookup map for adjective degree codes to their long form.
     ADJECTIVE_DEGREE_MAP: Final[dict[str | None, str]] = {
@@ -164,6 +204,9 @@ class AnnotationModal(QDialog):
         "c": "Comparative (c)",
         "s": "Superlative (s)",
     }
+    ADJECTIVE_DEGREE_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(ADJECTIVE_DEGREE_MAP.keys()) if k is not None
+    }
 
     #: A lookup map for adjective inflection codes to their long form.
     ADJECTIVE_INFLECTION_MAP: Final[dict[str | None, str]] = {
@@ -171,15 +214,20 @@ class AnnotationModal(QDialog):
         "s": "Strong (s)",
         "w": "Weak (w)",
     }
+    ADJECTIVE_INFLECTION_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(ADJECTIVE_INFLECTION_MAP.keys()) if k is not None
+    }
 
     #: A lookup map for preposition case codes to their long form.
-    PREPOSITION_CASE_MAP: Final[dict[str, str | None]] = {
-        "": None,
+    PREPOSITION_CASE_MAP: Final[dict[str | None, str]] = {
+        None: "",
         "a": "Accusative (a)",
         "d": "Dative (d)",
         "g": "Genitive (g)",
     }
-
+    PREPOSITION_CASE_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(PREPOSITION_CASE_MAP.keys()) if k is not None
+    }
     annotation_applied = Signal(Annotation)
 
     # Class-level state to remember last used values per POS type
@@ -818,7 +866,9 @@ class AnnotationModal(QDialog):
     def _apply_annotation(self) -> None:
         """Apply annotation and close dialog."""
         # Get POS
-        self.annotation.pos = self.PART_OF_SPEECH_MAP.get(self.pos_combo.currentText())
+        self.annotation.pos = self.INT_PART_OF_SPEECH_REVERSE_MAP.get(
+            self.pos_combo.currentIndex()
+        )
 
         # Save current values for future use
         if self.annotation.pos:
@@ -852,84 +902,88 @@ class AnnotationModal(QDialog):
 
     def _extract_article_values(self):
         """Extract article annotation values."""
-        self.annotation.article_type = self.ARTICLE_TYPE_MAP.get(
-            self.article_type_combo.currentText()
+        self.annotation.article_type = self.ARTICLE_TYPE_REVERSE_MAP.get(
+            self.article_type_combo.currentIndex()
         )
-        self.annotation.gender = self.GENDER_MAP.get(
-            self.article_gender_combo.currentText()
+        self.annotation.gender = self.GENDER_REVERSE_MAP.get(
+            self.article_gender_combo.currentIndex()
         )
-        self.annotation.number = self.NUMBER_MAP.get(
-            self.article_number_combo.currentText()
+        self.annotation.number = self.NUMBER_REVERSE_MAP.get(
+            self.article_number_combo.currentIndex()
         )
-        self.annotation.case = self.CASE_MAP.get(self.article_case_combo.currentText())
+        self.annotation.case = self.CASE_REVERSE_MAP.get(
+            self.article_case_combo.currentIndex()
+        )
 
     def _extract_noun_values(self):
         """Extract noun annotation values."""
-        self.annotation.gender = self.GENDER_MAP.get(self.gender_combo.currentText())
-        self.annotation.number = self.NUMBER_MAP.get(self.number_combo.currentText())
-        self.annotation.case = self.CASE_MAP.get(self.case_combo.currentText())
-        declension = self.declension_combo.currentText().strip()
-        self.annotation.declension = declension if declension else None
+        self.annotation.gender = self.GENDER_REVERSE_MAP.get(
+            self.gender_combo.currentIndex()
+        )
+        self.annotation.number = self.NUMBER_REVERSE_MAP.get(
+            self.number_combo.currentIndex()
+        )
+        self.annotation.case = self.CASE_REVERSE_MAP.get(self.case_combo.currentIndex())
+        self.annotation.declension = self.DECLENSION_REVERSE_MAP.get(
+            self.declension_combo.currentIndex()
+        )
 
     def _extract_verb_values(self):
         """Extract verb annotation values."""
-        class_text = self.verb_class_combo.currentText().strip()
-        if class_text:
-            # Extract code from text like "Weak II (w2)"
-            if "(" in class_text:
-                self.annotation.verb_class = class_text.split("(")[1].rstrip(")")
-            else:
-                self.annotation.verb_class = class_text
-        self.annotation.verb_tense = self.VERB_TENSE_MAP.get(
-            self.verb_tense_combo.currentText()
+        self.annotation.verb_class = self.VERB_CLASS_REVERSE_MAP.get(
+            self.verb_class_combo.currentIndex()
         )
-        self.annotation.verb_mood = self.VERB_MOOD_MAP.get(
-            self.verb_mood_combo.currentText()
+        self.annotation.verb_tense = self.VERB_TENSE_REVERSE_MAP.get(
+            self.verb_tense_combo.currentIndex()
         )
-        self.annotation.verb_person = self.VERB_PERSON_MAP.get(
+        self.annotation.verb_mood = self.VERB_MOOD_REVERSE_MAP.get(
+            self.verb_mood_combo.currentIndex()
+        )
+        self.annotation.verb_person = self.VERB_PERSON_REVERSE_MAP.get(
             cast("int", self.verb_person_combo.currentIndex())
         )
-        self.annotation.number = self.NUMBER_MAP.get(
-            self.verb_number_combo.currentText()
+        self.annotation.number = self.NUMBER_REVERSE_MAP.get(
+            self.verb_number_combo.currentIndex()
         )
-        self.annotation.verb_aspect = self.VERB_ASPECT_MAP.get(
-            self.verb_aspect_combo.currentText()
+        self.annotation.verb_aspect = self.VERB_ASPECT_REVERSE_MAP.get(
+            self.verb_aspect_combo.currentIndex()
         )
-        self.annotation.verb_form = self.VERB_FORM_MAP.get(
-            self.verb_form_combo.currentText()
+        self.annotation.verb_form = self.VERB_FORM_REVERSE_MAP.get(
+            self.verb_form_combo.currentIndex()
         )
 
     def _extract_adjective_values(self):
         """Extract adjective annotation values."""
         # Note: Need proper degree field
-        self.annotation.gender = self.GENDER_MAP.get(
-            self.adj_gender_combo.currentText()
+        self.annotation.gender = self.GENDER_REVERSE_MAP.get(
+            self.adj_gender_combo.currentIndex()
         )
-        self.annotation.number = self.NUMBER_MAP.get(
-            self.adj_number_combo.currentText()
+        self.annotation.number = self.NUMBER_REVERSE_MAP.get(
+            self.adj_number_combo.currentIndex()
         )
-        self.annotation.case = self.CASE_MAP.get(self.adj_case_combo.currentText())
+        self.annotation.case = self.CASE_REVERSE_MAP.get(
+            self.adj_case_combo.currentIndex()
+        )
 
     def _extract_pronoun_values(self):
         """Extract pronoun annotation values."""
-        self.annotation.pronoun_type = self.PRONOUN_TYPE_MAP.get(
-            self.pro_type_combo.currentText()
+        self.annotation.pronoun_type = self.PRONOUN_TYPE_REVERSE_MAP.get(
+            self.pro_type_combo.currentIndex()
         )
-        self.annotation.pronoun_type = self.PRONOUN_TYPE_MAP.get(
-            self.pro_type_combo.currentText()
+        self.annotation.gender = self.GENDER_REVERSE_MAP.get(
+            self.pro_gender_combo.currentIndex()
         )
-        self.annotation.gender = self.GENDER_MAP.get(
-            self.pro_gender_combo.currentText()
+        self.annotation.number = self.NUMBER_REVERSE_MAP.get(
+            self.pro_number_combo.currentIndex()
         )
-        self.annotation.number = self.NUMBER_MAP.get(
-            self.pro_number_combo.currentText()
+        self.annotation.case = self.CASE_REVERSE_MAP.get(
+            self.pro_case_combo.currentIndex()
         )
-        self.annotation.case = self.CASE_MAP.get(self.pro_case_combo.currentText())
 
     def _extract_preposition_values(self):
         """Extract preposition annotation values."""
-        self.annotation.prep_case = self.PREPOSITION_CASE_MAP.get(
-            self.prep_case_combo.currentText()
+        self.annotation.prep_case = self.PREPOSITION_CASE_REVERSE_MAP.get(
+            self.prep_case_combo.currentIndex()
         )
 
     def _extract_adverb_values(self):
