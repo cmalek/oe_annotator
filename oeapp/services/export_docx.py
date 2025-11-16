@@ -1,15 +1,21 @@
 """DOCX export service for Old English Annotator."""
 
-import sqlite3
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from docx import Document
 from docx.shared import Pt
-from oeapp.models.annotation import Annotation
+
+from oeapp.exc import DoesNotExist
+from oeapp.models.project import Project
+from oeapp.models.token import Token
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from docx.document import Document as DocumentObject
+
+    from oeapp.models.annotation import Annotation
+    from oeapp.models.sentence import Sentence
     from oeapp.services.db import Database
 
 
@@ -21,6 +27,49 @@ class DOCXExporter:
         db: Database connection
 
     """
+
+    #: A lookup map for number codes to their long form.
+    CASE_MAP: Final[dict[str, str]] = {
+        "n": "nom",
+        "a": "acc",
+        "g": "gen",
+        "d": "dat",
+        "i": "inst",
+    }
+    #: A lookup map for compact case codes to their short form.
+    COMPACT_CASE_MAP: Final[dict[str, str]] = {
+        "n": "n",
+        "a": "a",
+        "g": "g",
+        "d": "d",
+        "i": "i",
+    }
+    #: A lookup map for number codes to their short form.
+    NUMBER_MAP: Final[dict[str, str]] = {
+        "s": "1",
+        "p": "pl",
+    }
+    #: A lookup map for part of speech codes to their short form.
+    PART_OF_SPEECH_MAP: Final[dict[str, str]] = {
+        "N": "n:",
+        "V": "v:",
+        "A": "adj:",
+        "R": "pron:",
+    }
+    #: Pronoun type map.
+    PRONOUN_TYPE_MAP: Final[dict[str, str]] = {
+        "p": "pers",
+        "r": "rel",
+        "d": "dem",
+        "i": "int",
+    }
+    #: Article type map.
+    ARTICLE_TYPE_MAP: Final[dict[str, str]] = {
+        "d": "def",
+        "i": "ind",
+        "p": "poss",
+        "D": "dem",
+    }
 
     def __init__(self, db: Database) -> None:
         """
@@ -44,41 +93,17 @@ class DOCXExporter:
             True if successful, False otherwise
 
         """
-        doc = Document()
+        doc: DocumentObject = Document()
         self._setup_document_styles(doc)
-        try:
-            cursor = self.db.conn.cursor()
-
-            # Get project name
-            cursor.execute("SELECT name FROM projects WHERE id = ?", (project_id,))
-            project_row = cursor.fetchone()
-        except sqlite3.Error as e:
-            print(f"Database error: {e}")
-            return False
-
-        project_name = project_row["name"] if project_row else "Untitled Project"
+        project = Project.get(self.db, project_id)
 
         # Add title
-        doc.add_heading(project_name, level=1)
+        doc.add_heading(project.name, level=1)
         doc.add_paragraph()  # Blank line after title
 
-        try:
-            # Get sentences in order
-            cursor.execute(
-                "SELECT id, display_order, text_oe, text_modern FROM sentences "
-                "WHERE project_id = ? ORDER BY display_order",
-                (project_id,),
-            )
-            sentences = cursor.fetchall()
-        except sqlite3.Error as e:
-            print(f"Database error: {e}")
-            return False
-
-        for sentence_row in sentences:
-            sentence_id = sentence_row["id"]
-            display_order = sentence_row["display_order"]
-            text_oe = sentence_row["text_oe"]
-            text_modern = sentence_row["text_modern"]
+        for sentence in project.sentences:
+            display_order = sentence.display_order
+            text_modern = sentence.text_modern
 
             # Add sentence number
             sentence_num_para = doc.add_paragraph()
@@ -86,7 +111,7 @@ class DOCXExporter:
             sentence_num_run.bold = True
 
             # Build Old English sentence with annotations
-            self._add_oe_sentence_with_annotations(doc, sentence_id, text_oe)
+            self._add_oe_sentence_with_annotations(doc, sentence)
 
             # Add translation
             if text_modern:
@@ -99,7 +124,7 @@ class DOCXExporter:
             doc.add_paragraph()
 
             # Add notes
-            self._add_notes(doc, sentence_id)
+            self._add_notes(doc, sentence)
 
             # Blank line between sentences
             doc.add_paragraph()
@@ -107,12 +132,12 @@ class DOCXExporter:
         try:
             doc.save(str(output_path))
         except OSError as e:
-            print(f"Export error: {e}")
+            print(f"Export error: {e}")  # noqa: T201
             return False
         else:
             return True
 
-    def _setup_document_styles(self, doc: Document):
+    def _setup_document_styles(self, doc: DocumentObject) -> None:
         """
         Set up document styles.
 
@@ -124,78 +149,24 @@ class DOCXExporter:
         # Title, Body, Default are standard styles
 
     def _add_oe_sentence_with_annotations(  # noqa: PLR0912, PLR0915
-        self, doc: Document, sentence_id: int, text_oe: str
+        self,
+        doc: DocumentObject,
+        sentence: Sentence,
     ) -> None:
         """
         Add Old English sentence with superscript/subscript annotations.
 
         Args:
             doc: Document to add to
-            sentence_id: Sentence ID
-            text_oe: Old English text
+            sentence: Sentence to add
 
         """
-        cursor = self.db.conn.cursor()
-
-        try:
-            # Get tokens for this sentence
-            cursor.execute(
-                "SELECT id, order_index, surface FROM tokens WHERE sentence_id = ? ORDER BY order_index",
-                (sentence_id,),
-            )
-            tokens = cursor.fetchall()
-        except sqlite3.Error as e:
-            print(f"Database error: {e}")
-
-        # Get annotations for all tokens
-        token_ids = [t["id"] for t in tokens]
-        if not token_ids:
-            # No tokens, just add plain text
-            para = doc.add_paragraph(text_oe)
-            for run in para.runs:
-                run.italic = True
-            return
-
-        annotations = {}
-        try:
-            cursor.execute(
-                "SELECT * FROM annotations WHERE token_id IN ({})".format(
-                    ",".join(["?"] * len(token_ids))
-                ),
-                token_ids,
-            )
-            rows = cursor.fetchall()
-        except sqlite3.Error as e:
-            print(f"Database error: {e}")
-        for row in rows:
-            ann = Annotation(
-                token_id=row["token_id"],
-                pos=row["pos"],
-                gender=row["gender"],
-                number=row["number"],
-                case=row["case"],
-                declension=row["declension"],
-                pronoun_type=row["pronoun_type"],
-                verb_class=row["verb_class"],
-                verb_tense=row["verb_tense"],
-                verb_person=row["verb_person"],
-                verb_mood=row["verb_mood"],
-                verb_aspect=row["verb_aspect"],
-                verb_form=row["verb_form"],
-                prep_case=row["prep_case"],
-                uncertain=bool(row["uncertain"]),
-                alternatives_json=row["alternatives_json"],
-                confidence=row["confidence"],
-            )
-            annotations[row["token_id"]] = ann
-
         # Build paragraph with annotations
-        para = doc.add_paragraph()
+        para = doc.add_paragraph()  # type: ignore[attr-defined]
 
-        for i, token in enumerate(tokens):
-            token_id = token["id"]
-            surface = token["surface"]
-            annotation = annotations.get(token_id)
+        for i, token in enumerate(sentence.tokens):
+            surface = token.surface
+            annotation = token.annotation
 
             # Add word
             word_run = para.add_run(surface)
@@ -209,25 +180,27 @@ class DOCXExporter:
                 pos_label = self._format_pos(annotation)
                 if pos_label:
                     superscript_parts.append(pos_label)
+                if annotation.article_type:
+                    superscript_parts.append(
+                        self.ARTICLE_TYPE_MAP.get(
+                            annotation.article_type, annotation.article_type
+                        )
+                    )
 
                 # Add case/number/gender compact format
                 if annotation.case and annotation.number:
-                    case_map = {"n": "n", "a": "a", "g": "g", "d": "d", "i": "i"}
-                    number_map = {"s": "1", "p": "pl"}
-                    case_str = case_map.get(annotation.case, "")
-                    number_str = number_map.get(annotation.number, "")
+                    case_str = self.COMPACT_CASE_MAP.get(annotation.case, "")
+                    number_str = self.NUMBER_MAP.get(annotation.number, "")
                     if case_str and number_str:
                         compact = f"{case_str}{number_str}"
                         superscript_parts.append(compact)
                 elif annotation.case:
-                    case_map = {"n": "n", "a": "a", "g": "g", "d": "d", "i": "i"}
                     superscript_parts.append(
-                        case_map.get(annotation.case, annotation.case)
+                        self.COMPACT_CASE_MAP.get(annotation.case, annotation.case)
                     )
                 elif annotation.number:
-                    number_map = {"s": "1", "p": "pl"}
                     superscript_parts.append(
-                        number_map.get(annotation.number, annotation.number)
+                        self.NUMBER_MAP.get(annotation.number, annotation.number)
                     )
                 if annotation.gender:
                     superscript_parts.append(annotation.gender)
@@ -240,16 +213,10 @@ class DOCXExporter:
                     subscript_parts.append(annotation.verb_class)
                 # Add compact case/number combinations like "dat1", "acc1"
                 if annotation.case and annotation.number:
-                    case_map = {
-                        "n": "nom",
-                        "a": "acc",
-                        "g": "gen",
-                        "d": "dat",
-                        "i": "inst",
-                    }
-                    number_map = {"s": "1", "p": "pl"}
-                    case_str = case_map.get(annotation.case, annotation.case)[:3]
-                    number_str = number_map.get(annotation.number, annotation.number)
+                    case_str = self.CASE_MAP.get(annotation.case, annotation.case)[:3]
+                    number_str = self.NUMBER_MAP.get(
+                        annotation.number, annotation.number
+                    )
                     if annotation.case in [
                         "d",
                         "a",
@@ -283,12 +250,12 @@ class DOCXExporter:
                     sub_run.font.subscript = True
 
             # Add space after word (except last token)
-            if i < len(tokens) - 1:
+            if i < len(sentence.tokens) - 1:
                 para.add_run(" ")
 
     def _format_pos(self, annotation: Annotation) -> str:
         """
-        Format POS abbreviation for display.
+        Format part of speech abbreviation for display.
 
         Args:
             annotation: Annotation object
@@ -300,18 +267,10 @@ class DOCXExporter:
         if not annotation.pos:
             return ""
 
-        pos_map = {
-            "N": "n:",
-            "V": "v:",
-            "A": "adj:",
-            "R": "pron:",
-        }
-
-        base = pos_map.get(annotation.pos, annotation.pos.lower())
+        base = self.PART_OF_SPEECH_MAP.get(annotation.pos, annotation.pos.lower())
 
         if annotation.pos == "R" and annotation.pronoun_type:
-            type_map = {"p": "pers", "r": "rel", "d": "dem", "i": "int"}
-            type_str = type_map.get(annotation.pronoun_type, "")
+            type_str = self.PRONOUN_TYPE_MAP.get(annotation.pronoun_type, "")
             if type_str:
                 return f"{base}{type_str}"
         elif annotation.pos == "V" and annotation.verb_class:
@@ -319,46 +278,33 @@ class DOCXExporter:
 
         return base
 
-    def _add_notes(self, doc: Document, sentence_id: int) -> None:
+    def _add_notes(self, doc: DocumentObject, sentence: Sentence) -> None:
         """
         Add notes for a sentence.
 
         Args:
             doc: Document to add to
-            sentence_id: Sentence ID
+            sentence: Sentence to add notes for
 
         """
-        cursor = self.db.conn.cursor()
-
-        # Get notes for this sentence
-        cursor.execute(
-            "SELECT start_token, note_text_md FROM notes "
-            "WHERE sentence_id = ? AND note_type IN ('token', 'span', 'sentence') "
-            "ORDER BY start_token, id",
-            (sentence_id,),
-        )
-        notes = cursor.fetchall()
-
-        if not notes:
+        if not sentence.notes:
             return
 
         # Get token surfaces for note references
-        cursor.execute(
-            "SELECT id, surface FROM tokens WHERE sentence_id = ? ORDER BY order_index",
-            (sentence_id,),
-        )
-        tokens_dict = {row["id"]: row["surface"] for row in cursor.fetchall()}
-
-        # Add notes as numbered list
-        for note_row in notes:
-            token_id = note_row["start_token"]
-            note_text = note_row["note_text_md"]
-
-            # Get token surface if available
-            token_surface = tokens_dict.get(token_id, "") if token_id else ""
+        for note in sentence.notes:
+            if not note.start_token:
+                start_token = None
+            else:
+                try:
+                    start_token = Token.get(self.db, note.start_token)
+                except DoesNotExist:
+                    print(f"Note {note.id} has no start token")  # noqa: T201
+                    start_token = None
+            note_text = note.note_text_md
 
             # Format note
-            note_line = f"{token_surface}, {note_text}" if token_surface else note_text
+            note_line = (
+                f"{start_token.surface}, {note_text}" if start_token else note_text
+            )
 
             doc.add_paragraph(note_line)
-            # Could add numbering here if needed
