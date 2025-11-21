@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
@@ -8,11 +9,12 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -24,6 +26,40 @@ from oeapp.models.project import Project
 
 if TYPE_CHECKING:
     from oeapp.ui.main_window import MainWindow
+
+
+class DateTimeTableWidgetItem(QTableWidgetItem):
+    """
+    Custom QTableWidgetItem that sorts by datetime value instead of display text.
+    """
+
+    def __init__(self, display_text: str, dt: datetime) -> None:
+        """
+        Initialize the datetime table item.
+
+        Args:
+            display_text: Text to display in the table
+            dt: Datetime object for sorting
+
+        """
+        super().__init__(display_text)
+        self._datetime = dt
+
+    def __lt__(self, other: QTableWidgetItem) -> bool:
+        """
+        Compare items by datetime for proper sorting.
+
+        Args:
+            other: Other item to compare with
+
+        Returns:
+            True if this datetime is less than the other
+
+        """
+        if isinstance(other, DateTimeTableWidgetItem):
+            return self._datetime < other._datetime
+        # Fall back to text comparison for non-datetime items
+        return self.text() < other.text()
 
 
 class NewProjectDialog:
@@ -289,20 +325,53 @@ class OpenProjectDialog:
         self.dialog.setWindowTitle("Open Project")
         self.dialog.setMinimumSize(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
         self.layout = QVBoxLayout(self.dialog)
-        self.project_list = QListWidget(self.dialog)
+
+        # Add search box
+        search_label = QLabel("Search:")
+        self.search_box = QLineEdit(self.dialog)
+        self.search_box.setPlaceholderText("Search projects...")
+        self.search_box.textChanged.connect(self._filter_projects)
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(self.search_box)
+        self.layout.addLayout(search_layout)
+
+        # Create table widget
+        self.project_table = QTableWidget(self.dialog)
+        self.project_table.setColumnCount(3)
+        self.project_table.setHorizontalHeaderLabels(
+            ["Project Name", "Last Modified", "Created"]
+        )
+        self.project_table.setSortingEnabled(True)
+        self.project_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.project_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.project_table.setAlternatingRowColors(True)
+        self.project_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        # Configure column widths
+        header = self.project_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.layout.addWidget(self.project_table)
         self.load_project_list()
-        self.layout.addWidget(self.project_list)
         self._add_button_box()
 
     def load_project_list(self) -> None:
         """
         Load the project list into the dialog.
 
-        This looks up projects in the database and adds them to the list widget.
+        This looks up projects in the database and adds them to the table widget.
         If there are no projects, it shows a message and returns.
-        If there are projects, it adds them to the list widget.
+        If there are projects, it adds them to the table widget.
         """
-        self.project_list.clear()
+        # Disable sorting while populating to avoid issues
+        self.project_table.setSortingEnabled(False)
+        self.project_table.setRowCount(0)
+
         projects = list(
             self.main_window.session.scalars(
                 select(Project).order_by(Project.updated_at.desc())
@@ -313,11 +382,48 @@ class OpenProjectDialog:
                 "No projects found. Create a new project first.",
                 title="No Projects",
             )
+            self.project_table.setSortingEnabled(True)
             return
-        for project in projects:
-            item = QListWidgetItem(project.name)
-            item.setData(Qt.ItemDataRole.UserRole, project.id)
-            self.project_list.addItem(item)
+
+        self.project_table.setRowCount(len(projects))
+        for row, project in enumerate(projects):
+            # Project Name
+            name_item = QTableWidgetItem(project.name)
+            name_item.setData(Qt.ItemDataRole.UserRole, project.id)
+            self.project_table.setItem(row, 0, name_item)
+
+            # Last Modified - format as human-readable date
+            modified_str = project.updated_at.strftime("%b %d, %Y %I:%M %p")
+            modified_item = DateTimeTableWidgetItem(modified_str, project.updated_at)
+            self.project_table.setItem(row, 1, modified_item)
+
+            # Created - format as human-readable date
+            created_str = project.created_at.strftime("%b %d, %Y %I:%M %p")
+            created_item = DateTimeTableWidgetItem(created_str, project.created_at)
+            self.project_table.setItem(row, 2, created_item)
+
+        # Re-enable sorting after population
+        self.project_table.setSortingEnabled(True)
+
+        # Store all projects for filtering
+        self.all_projects = projects
+
+    def _filter_projects(self, search_text: str) -> None:
+        """
+        Filter the project table based on search text.
+
+        Args:
+            search_text: Text to search for in project names
+
+        """
+        search_lower = search_text.lower()
+        for row in range(self.project_table.rowCount()):
+            name_item = self.project_table.item(row, 0)
+            if name_item:
+                project_name = name_item.text().lower()
+                # Show row if search text is empty or matches project name
+                should_hide = bool(search_text) and search_lower not in project_name
+                self.project_table.setRowHidden(row, should_hide)
 
     def _open_new_project_dialog(self) -> None:
         """
@@ -357,23 +463,25 @@ class OpenProjectDialog:
         """
         Open an existing project.
         """
-        # Get the selected project from the list widget.
-        selected_item = self.project_list.currentItem()
-        if selected_item:
-            self.project_id = selected_item.data(Qt.ItemDataRole.UserRole)
-            # Get the project from the database.
-            project = cast(
-                "Project", self.main_window.session.get(Project, self.project_id)
-            )
-            if project is None:
-                self.main_window.show_warning("Project not found")
-                return
-            # Configure the app for the project.
-            self.main_window._configure_project(project)
-            # Set the window title to the project name.
-            self.main_window.setWindowTitle(f"Ænglisc Toolkit - {project.name}")
-            self.main_window.show_message("Project opened")
-            self.dialog.accept()
+        # Get the selected row from the table.
+        selected_row = self.project_table.currentRow()
+        if selected_row >= 0:
+            name_item = self.project_table.item(selected_row, 0)
+            if name_item:
+                self.project_id = name_item.data(Qt.ItemDataRole.UserRole)
+                # Get the project from the database.
+                project = cast(
+                    "Project", self.main_window.session.get(Project, self.project_id)
+                )
+                if project is None:
+                    self.main_window.show_warning("Project not found")
+                    return
+                # Configure the app for the project.
+                self.main_window._configure_project(project)
+                # Set the window title to the project name.
+                self.main_window.setWindowTitle(f"Ænglisc Toolkit - {project.name}")
+                self.main_window.show_message("Project opened")
+                self.dialog.accept()
 
     def execute(self) -> None:
         """
