@@ -44,11 +44,17 @@ class ClickableTextEdit(QTextEdit):
     """QTextEdit that emits a signal when clicked."""
 
     clicked = Signal(QPoint)
+    double_clicked = Signal(QPoint)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         """Handle mouse press event and emit clicked signal."""
         super().mousePressEvent(event)
         self.clicked.emit(event.position().toPoint())
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        """Handle mouse double-click event and emit double_clicked signal."""
+        super().mouseDoubleClickEvent(event)
+        self.double_clicked.emit(event.position().toPoint())
 
 
 class SentenceCard(QWidget):
@@ -221,6 +227,7 @@ class SentenceCard(QWidget):
         self.oe_text_edit.setPlaceholderText("Enter Old English text...")
         self.oe_text_edit.textChanged.connect(self._on_oe_text_changed)
         self.oe_text_edit.clicked.connect(self._on_oe_text_clicked)
+        self.oe_text_edit.double_clicked.connect(self._on_oe_text_double_clicked)
         layout.addWidget(self.oe_text_edit)
 
         # Token annotation grid
@@ -404,6 +411,38 @@ class SentenceCard(QWidget):
         token_index = self._find_token_at_position(text, cursor_pos)
         if token_index is not None:
             self.token_table.select_token(token_index)
+
+    def _on_oe_text_double_clicked(self, position: QPoint) -> None:
+        """
+        Handle double-click on Old English text to open annotation dialog for token.
+
+        Args:
+            position: Mouse double-click position in widget coordinates
+
+        """
+        # Get cursor at click position
+        cursor = self.oe_text_edit.cursorForPosition(position)
+        cursor_pos = cursor.position()
+
+        # Get the plain text
+        text = self.oe_text_edit.toPlainText()
+        if not text or not self.tokens:
+            return
+
+        # Find which token contains this cursor position
+        token_index = self._find_token_at_position(text, cursor_pos)
+        if token_index is not None:
+            # Select the token in the table
+            self.token_table.select_token(token_index)
+            # Open the annotation modal for this token
+            token = self.tokens[token_index]
+            # Get or create annotation
+            annotation = token.annotation
+            if annotation is None and self.session and token.id:
+                annotation = self.session.get(Annotation, token.id)
+            modal = AnnotationModal(token, annotation, self)
+            modal.annotation_applied.connect(self._on_annotation_applied)
+            modal.exec()
 
     def _find_token_at_position(self, text: str, position: int) -> int | None:
         """

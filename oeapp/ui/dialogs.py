@@ -362,7 +362,7 @@ class OpenProjectDialog:
 
     def load_project_list(self) -> None:
         """
-        Load the project list into the dialog.
+         Update the project list in the table widget.
 
         This looks up projects in the database and adds them to the table widget.
         If there are no projects, it shows a message and returns.
