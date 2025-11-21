@@ -319,15 +319,37 @@ class OpenProjectDialog:
             item.setData(Qt.ItemDataRole.UserRole, project.id)
             self.project_list.addItem(item)
 
+    def _open_new_project_dialog(self) -> None:
+        """
+        Open the NewProjectDialog and close the OpenProjectDialog.
+        """
+        self.dialog.reject()  # Close the OpenProjectDialog
+        new_project_dialog = NewProjectDialog(self.main_window)
+        new_project_dialog.execute()
+
     def _add_button_box(self) -> None:
         """
         Add the button box to the dialog.  The button box will be used to accept
         or cancel the dialog.
         """
+        # Create a horizontal layout for the buttons
+        button_layout = QHBoxLayout()
+
+        # Add "New project" button on the left
+        new_project_button = QPushButton("New project")
+        new_project_button.clicked.connect(self._open_new_project_dialog)
+        button_layout.addWidget(new_project_button)
+
+        # Add stretch to push button box to the right
+        button_layout.addStretch()
+
+        # Add the standard button box on the right
         self.button_box = QDialogButtonBox(self.dialog)
         self.button_box.addButton(QDialogButtonBox.StandardButton.Ok)
         self.button_box.addButton(QDialogButtonBox.StandardButton.Cancel)
-        self.layout.addWidget(self.button_box)
+        button_layout.addWidget(self.button_box)
+
+        self.layout.addLayout(button_layout)
 
     def execute(self) -> None:
         """
