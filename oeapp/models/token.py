@@ -155,86 +155,84 @@ class Token(Base):
         return tokens
 
     @classmethod
-    def _find_matched_token_ids(
-        cls,
-        existing_tokens: list[Token],
-        token_strings: list[str],
-    ) -> tuple[set[int], dict[int, Token]]:
-        """
-        When updating a sentence, find matched tokens in the existing tokens and
-        the new token strings.  This is called by :meth:`update_from_sentence`.
-
-        Args:
-            existing_tokens: List of existing tokens
-            token_strings: List of new token strings
-
-        Returns:
-            Dictionary of matched tokens
-            The key is the position of the token in the new token strings,
-            the value is the matched token.
-
-        """
-        # Build a mapping of position -> existing token for quick lookup
-        position_to_token = {token.order_index: token for token in existing_tokens}
-        # Track which existing tokens have been matched (by their id)
-        matched_token_ids = set()
-
-        matched_positions = {}
-        for new_index, new_surface in enumerate(token_strings):
-            if new_index in position_to_token:
-                existing_token = position_to_token[new_index]
-                if (
-                    existing_token.surface == new_surface
-                    and existing_token.id is not None
-                ):
-                    # Perfect match at same position - no changes needed
-                    matched_positions[new_index] = existing_token
-                    matched_token_ids.add(existing_token.id)
-
-        return matched_token_ids, matched_positions
-
-    @classmethod
-    def _process_unmatched_tokens(  # noqa: PLR0913
-        cls,
-        session,
-        existing_tokens: list[Token],
-        matched_token_ids: set[int],
-        matched_positions: dict[int, Token],
-        token_strings: list[str],
-        sentence_id: int,
+    def update_from_sentence(  # noqa: PLR0912, PLR0915
+        cls, session, sentence_text: str, sentence_id: int
     ) -> None:
         """
-        Process unmatched tokens when updating a sentence.  Save the new tokens
-        and update the existing tokens.  This is called by
-        :meth:`update_from_sentence`.
+        Update all the tokens in the sentence, removing any tokens that are no
+        longer in the sentence, and adding any new tokens.
+
+        We will also re-order the tokens to match the order of the tokens in the
+        sentence.
+
+        There's no need to deal with individual tokens, as they are explicitly
+        bound to the sentence, thus instead of :meth:`update` taking a token id
+        or surface, it takes the sentence text and sentence id.
+
+        The goal is to update the text of the sentence without losing any
+        annotations on the tokens that need to remain.
+
+        The algorithm uses a two-phase matching approach:
+        1. Phase 1: Match tokens at same position with same surface (exact matches)
+        2. Phase 2: Match remaining tokens by surface only (handles reordering,
+           edits, duplicates)
+
+        Each existing token can only be matched once, ensuring duplicate tokens
+        (e.g., "swā swā") are handled correctly.
 
         Args:
             session: SQLAlchemy session
-            existing_tokens: List of existing tokens
-            matched_token_ids: Set of matched token IDs
-            matched_positions: Dictionary of matched positions
-            token_strings: List of new token strings
+            sentence_text: Text of the sentence to tokenize
             sentence_id: Sentence ID
 
         """
+        # Tokenize the new sentence text
+        token_strings = cls.tokenize(sentence_text)
+
+        # Get existing tokens ordered by order_index
+        stmt = (
+            select(cls).where(cls.sentence_id == sentence_id).order_by(cls.order_index)
+        )
+        existing_tokens = list(session.scalars(stmt).all())
+
+        # Phase 1: Match tokens at same position
+        # (handles exact matches and position-based surface updates)
+        matched_positions: dict[int, Token] = {}
+        matched_token_ids: set[int] = set()
+
+        # Build a mapping of position -> existing token for quick lookup
+        position_to_token = {token.order_index: token for token in existing_tokens}
+
+        for new_index, new_surface in enumerate(token_strings):
+            if new_index in position_to_token:
+                existing_token = position_to_token[new_index]
+                if existing_token.id is not None:
+                    # Token exists at this position - match it (even if surface differs)
+                    matched_positions[new_index] = existing_token
+                    matched_token_ids.add(existing_token.id)
+                    # Update surface if it changed (preserves annotation and notes)
+                    if existing_token.surface != new_surface:
+                        existing_token.surface = new_surface
+                        session.add(existing_token)
+
+        # Phase 2: Match remaining unmatched tokens by surface only
+        # Get list of unmatched existing tokens
         unmatched_existing = [
             token
             for token in existing_tokens
             if token.id is not None and token.id not in matched_token_ids
         ]
 
-        # First, move all unmatched existing tokens to temporary positions to avoid
-        # conflicts when renumbering. Use negative offsets to avoid conflicts.
-        temp_offset = -(len(existing_tokens) + len(token_strings))
+        # Move all unmatched existing tokens to temporary negative positions
+        # to avoid unique constraint violations during updates
+        temp_offset = -(len(existing_tokens) + len(token_strings) + 1)
         for token in unmatched_existing:
-            if token.id is not None:
-                token.order_index = temp_offset
-                session.add(token)
-                temp_offset += 1
+            token.order_index = temp_offset
+            session.add(token)
+            temp_offset += 1
         session.flush()
 
-        # Iterate over the new token strings and try to match them to existing
-        # tokens
+        # Now match remaining positions by surface
         for new_index, new_surface in enumerate(token_strings):
             if new_index not in matched_positions:
                 # Try to find an unmatched existing token with matching surface
@@ -248,10 +246,10 @@ class Token(Base):
                         matched_positions[new_index] = existing_token
                         matched_token_ids.add(existing_token.id)
                         unmatched_existing.remove(existing_token)
-                        # Update order_index and surface (in case surface changed)
+                        # Update surface (in case it changed) and order_index
                         # Safe to update now since we moved all tokens to temp positions
-                        existing_token.order_index = new_index
                         existing_token.surface = new_surface
+                        existing_token.order_index = new_index
                         session.add(existing_token)
                         matched = True
                         break
@@ -266,6 +264,7 @@ class Token(Base):
                     session.add(new_token)
                     session.flush()  # Get the ID
 
+                    # Create empty annotation for new token
                     existing_annotation = session.scalar(
                         select(Annotation).where(Annotation.token_id == new_token.id)
                     )
@@ -274,98 +273,40 @@ class Token(Base):
                         session.add(annotation)
 
                     matched_positions[new_index] = new_token
+
         session.flush()
 
-    @classmethod
-    def update_from_sentence(
-        cls, session, sentence_text: str, sentence_id: int
-    ) -> None:
-        """
-        Update all the tokens in the sentence, removing any tokens that are no
-        longer in the sentence, and adding any new tokens.
+        # Update order_index for tokens that were matched in Phase 1 but may need
+        # their order_index updated (shouldn't happen, but ensure consistency)
+        for new_index, token in matched_positions.items():
+            if token.order_index != new_index:
+                token.order_index = new_index
+                session.add(token)
 
-        We will also re-order the tokens to match the order of the tokens in the
-        sentence.
+        session.flush()
 
-        There's no need to deal with individual tokens, as they are explicitly
-        bound to the sentence, thus instead of :meth:`update` taking a token id
-        or surface, it takes the sentence text and sentence id.
-
-        Our here is to update the text of the sentence without losing any
-        annotations on the tokens that need to remain.
-
-        The algorithm handles duplicate tokens (e.g., multiple instances of "þā"
-        or "him") by matching them positionally and by surface, ensuring each
-        existing token is matched at most once.
-
-        Args:
-            session: SQLAlchemy session
-            sentence_text: Text of the sentence to tokenize
-            sentence_id: Sentence ID
-
-        """
-        token_strings = cls.tokenize(sentence_text)
-        # Get existing tokens using SQLAlchemy query
-        stmt = (
-            select(cls).where(cls.sentence_id == sentence_id).order_by(cls.order_index)
-        )
-        existing_tokens = list(session.scalars(stmt).all())
-
-        # First pass: Try to match tokens at the same position with same surface
-        # This preserves tokens that haven't moved
-        matched_token_ids, matched_positions = cls._find_matched_token_ids(
-            existing_tokens, token_strings
-        )
-        # Second pass: For unmatched positions, try to find an unmatched
-        # existing token with matching surface. This handles cases where tokens
-        # have been reordered or where duplicates exist.
-        cls._process_unmatched_tokens(
-            session,
-            existing_tokens,
-            matched_token_ids,
-            matched_positions,
-            token_strings,
-            sentence_id,
-        )
-
-        # Third pass: Delete tokens that weren't matched (they no longer exist
-        # in the sentence)
+        # Delete tokens that weren't matched (they no longer exist in the sentence)
+        # Cascade delete will handle annotations and notes
         for token in existing_tokens:
             if token.id and token.id not in matched_token_ids:
                 session.delete(token)
 
-        # Fourth pass: Ensure all matched tokens have the correct order_index
-        # (This handles any edge cases where order_index might be inconsistent)
-        for new_index in range(len(token_strings)):
-            if new_index in matched_positions:
-                token = matched_positions[new_index]
-                if token.order_index != new_index:
-                    token.order_index = new_index
-                    session.add(token)
-
         session.flush()
 
-        # Final pass: Ensure every position has a token and all tokens are
-        # numbered sequentially. This catches any inconsistencies and ensures
-        # proper sequential numbering.
+        # Final verification: ensure all positions are filled and sequential
         if len(matched_positions) != len(token_strings):
-            # This should not happen, but if it does, we need to handle it
             msg = (
                 f"Position count mismatch: expected {len(token_strings)} "
                 f"positions, found {len(matched_positions)} in matched_positions"
             )
             raise ValueError(msg)
+
         # Ensure all tokens are numbered sequentially (0, 1, 2, ...)
-        # This handles any edge cases where order_index might be inconsistent
         for new_index in range(len(token_strings)):
             if new_index not in matched_positions:
                 msg = f"Missing token at position {new_index}"
                 raise ValueError(msg)
             token = matched_positions[new_index]
-            # Reload token from DB to get latest state (in case it was updated
-            # elsewhere)
-            if token.id is not None:
-                session.refresh(token)
             if token.order_index != new_index:
                 token.order_index = new_index
                 session.add(token)

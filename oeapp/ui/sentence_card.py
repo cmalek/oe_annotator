@@ -547,6 +547,9 @@ class SentenceCard(QWidget):
             )
             if self.command_manager.execute(command):
                 self.sentence.text_oe = new_text
+                # Refresh tokens after retokenization
+                self.session.refresh(self.sentence)
+                self.set_tokens(self.sentence.tokens)
 
     def _on_translation_changed(self) -> None:
         """Handle translation text change."""
