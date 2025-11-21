@@ -116,6 +116,7 @@ class AnnotationModal(QDialog):
     #: A lookup map for verb class codes to their long form.
     VERB_CLASS_MAP: Final[dict[str | None, str]] = {
         None: "",
+        "a": "Anomolous (a)",
         "w1": "Weak Class I (w1)",
         "w2": "Weak Class II (w2)",
         "w3": "Weak Class III (w3)",

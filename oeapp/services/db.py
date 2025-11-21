@@ -153,7 +153,7 @@ class Database:
                 declension TEXT,
                 pronoun_type TEXT CHECK(pronoun_type IN ('p','r','d','i')),
                 article_type TEXT CHECK(article_type IN ('d','i','p','D')),
-                verb_class TEXT,
+                verb_class TEXT CHECK(verb_class IN ('a','w1','w2','w3','s1','s2','s3','s4','s5','s6','s7')),
                 verb_tense TEXT CHECK(verb_tense IN ('p','n')),
                 verb_person INTEGER CHECK(verb_person IN (1,2,3)),
                 verb_mood TEXT CHECK(verb_mood IN ('i','s','imp')),
@@ -166,7 +166,7 @@ class Database:
                 last_inferred_json TEXT,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """)
+        """)  # noqa: E501
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_annotations_pos ON annotations(pos)
         """)
