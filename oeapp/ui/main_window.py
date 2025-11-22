@@ -1,5 +1,6 @@
 """Main application window."""
 
+import json
 import sys
 from pathlib import Path
 from typing import Final, cast
@@ -20,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 from sqlalchemy import select
 
-from oeapp.db import SessionLocal, apply_migrations
+from oeapp.db import SessionLocal, apply_migrations, create_engine_with_path
 from oeapp.models.project import Project
 from oeapp.models.token import Token
 from oeapp.services.autosave import AutosaveService
@@ -28,8 +29,10 @@ from oeapp.services.backup import BackupService
 from oeapp.services.commands import CommandManager, MergeSentenceCommand
 from oeapp.services.export_docx import DOCXExporter
 from oeapp.services.filter import FilterService
+from oeapp.services.import_export import ProjectExporter, ProjectImporter
 from oeapp.ui.dialogs import (
     BackupsViewDialog,
+    ImportProjectDialog,
     MigrationFailureDialog,
     NewProjectDialog,
     OpenProjectDialog,
@@ -165,6 +168,28 @@ class MainMenu:
             settings_action.triggered.connect(self.main_window.show_settings_dialog)
             self.file_menu.addAction(settings_action)
 
+    def add_project_menu(self) -> None:
+        """
+        Create project menu.
+
+        This means adding a "Project" menu to :attr:`self.menu`, the main menu bar,
+        with the following actions:
+
+        - Export...
+        - Import...
+        """
+        project_menu = self.menu.addMenu("&Project")
+
+        export_action = QAction("&Export...", project_menu)
+        export_action.triggered.connect(self.main_window.export_project_json)
+        project_menu.addAction(export_action)
+
+        import_action = QAction("&Import...", project_menu)
+        import_action.triggered.connect(
+            self.main_window.action_service.import_project_json
+        )
+        project_menu.addAction(import_action)
+
     def add_help_menu(self) -> None:
         """
         Create help menu.
@@ -185,6 +210,7 @@ class MainMenu:
         """Build the main menu."""
         self.add_file_menu()
         self.add_tools_menu()
+        self.add_project_menu()
         self.add_help_menu()
         # Add preferences after menus are built so we can find the right place
         self.add_preferences_menu()
@@ -281,8 +307,6 @@ class MainWindow(QMainWindow):
         """
         Handle database migrations with automatic backup and restore on failure.
         """
-        from oeapp.db import get_current_code_migration_version
-
         settings = QSettings()
 
         # Check if we should skip migrations
@@ -291,7 +315,6 @@ class MainWindow(QMainWindow):
         )
         if skip_until_version:
             # Create a temporary engine to check current version
-            from oeapp.db import create_engine_with_path
 
             temp_engine = create_engine_with_path()
             current_db_version = self.backup_service.get_current_migration_version(
@@ -636,6 +659,69 @@ class MainWindow(QMainWindow):
         else:
             self.show_error("Failed to create backup.")
 
+    def export_project_json(self) -> None:
+        """
+        Export project to JSON format.
+        """
+        if not self.session or not self.current_project_id:
+            self.show_warning("No project open")
+            return
+
+        # Get project name for default filename
+        project = self.session.get(Project, self.current_project_id)
+        if project is None:
+            self.show_warning("Project not found")
+            return
+
+        # Generate default filename: project name (lowercased, whitespace -> _)
+        # + ".json"
+        default_filename = project.name.lower().replace(" ", "_") + ".json"
+
+        # Get file path from user
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Project",
+            default_filename,
+            "JSON Files (*.json);;All Files (*)",
+        )
+
+        # If the user cancels the dialog, do nothing
+        if not file_path:
+            return
+
+        # Ensure .json extension
+        if not file_path.endswith(".json"):
+            file_path += ".json"
+
+        # Export project data
+        exporter = ProjectExporter(self.session)
+        try:
+            project_data = exporter.export_project(self.current_project_id)
+        except ValueError as e:
+            self.show_error(str(e), title="Export Error")
+            return
+
+        # Write JSON to file
+        try:
+            with Path(file_path).open("w", encoding="utf-8") as f:
+                json.dump(project_data, f, indent=2, ensure_ascii=False)
+        except (OSError, PermissionError) as e:
+            self.show_error(
+                f"Failed to write export file:\n{e!s}", title="Export Error"
+            )
+            return
+        except (TypeError, ValueError) as e:
+            self.show_error(
+                f"Failed to serialize project data:\n{e!s}", title="Export Error"
+            )
+            return
+
+        self.show_information(
+            f"Project exported successfully to:\n{file_path}",
+            title="Export Successful",
+        )
+        self.show_message("Export completed", duration=3000)
+
     def _on_sentence_merged(self) -> None:
         """
         Handle sentence merge signal.
@@ -941,6 +1027,57 @@ class MainWindowActions:
                     # Open annotation modal
                     card._open_annotation_modal()
                 break
+
+    def import_project_json(self) -> None:
+        """
+        Import project from JSON format.
+        """
+        if not self.session:
+            self.main_window.show_warning("Database session not available")
+            return
+
+        # Get file path from user
+        file_path, _ = QFileDialog.getOpenFileName(
+            self.main_window, "Import Project", "", "JSON Files (*.json);;All Files (*)"
+        )
+
+        # If the user cancels the dialog, do nothing
+        if not file_path:
+            return
+
+        try:
+            # Load and parse JSON
+            with Path(file_path).open("r", encoding="utf-8") as f:
+                project_data = json.load(f)
+
+            # Import project
+            importer = ProjectImporter(self.session)
+            imported_project, was_renamed = importer.import_project(project_data)
+
+            # Show confirmation dialog
+            dialog = ImportProjectDialog(
+                self.main_window, imported_project, was_renamed
+            )
+            if dialog.execute():
+                # User chose to open the project
+                self.main_window._configure_project(imported_project)
+                self.main_window.setWindowTitle(
+                    f"Ænglisc Toolkit - {imported_project.name}"
+                )
+                self.main_window.show_message(
+                    "Project imported and opened", duration=3000
+                )
+            else:
+                self.main_window.show_message(
+                    "Project imported successfully", duration=2000
+                )
+
+        except ValueError as e:
+            self.main_window.show_error(str(e), title="Import Error")
+        except Exception as e:
+            self.main_window.show_error(
+                f"An error occurred during import:\n{e!s}", title="Import Error"
+            )
 
     def export_project(self) -> None:
         """

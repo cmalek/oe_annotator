@@ -5,10 +5,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING, ClassVar
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, select
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from oeapp.db import Base
 from oeapp.models.annotation import Annotation
+from oeapp.utils import from_utc_iso, to_utc_iso
 
 if TYPE_CHECKING:
     from oeapp.models.sentence import Sentence
@@ -58,6 +59,64 @@ class Token(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+
+    def to_json(self) -> dict:
+        """
+        Serialize token to JSON-compatible dictionary (without PKs).
+
+        Returns:
+            Dictionary containing token data with annotation if exists
+
+        """
+        token_data: dict = {
+            "order_index": self.order_index,
+            "surface": self.surface,
+            "lemma": self.lemma,
+            "created_at": to_utc_iso(self.created_at),
+            "updated_at": to_utc_iso(self.updated_at),
+        }
+
+        # Add annotation if it exists
+        if self.annotation:
+            token_data["annotation"] = self.annotation.to_json()
+
+        return token_data
+
+    @classmethod
+    def from_json(cls, session: Session, sentence_id: int, token_data: dict) -> Token:
+        """
+        Create a token and annotation from JSON import data.
+
+        Args:
+            session: SQLAlchemy session
+            sentence_id: Sentence ID to attach token to
+            token_data: Token data dictionary from JSON
+
+        Returns:
+            Created Token entity
+
+        """
+        token = cls(
+            sentence_id=sentence_id,
+            order_index=token_data["order_index"],
+            surface=token_data["surface"],
+            lemma=token_data.get("lemma"),
+        )
+        created_at = from_utc_iso(token_data.get("created_at"))
+        if created_at:
+            token.created_at = created_at
+        updated_at = from_utc_iso(token_data.get("updated_at"))
+        if updated_at:
+            token.updated_at = updated_at
+
+        session.add(token)
+        session.flush()
+
+        # Create annotation if it exists
+        if "annotation" in token_data:
+            Annotation.from_json(session, token.id, token_data["annotation"])
+
+        return token
 
     @classmethod
     def create_from_sentence(

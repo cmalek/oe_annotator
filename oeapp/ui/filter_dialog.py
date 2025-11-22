@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from oeapp.services.filter import FilterCriteria, FilterService
 
 
@@ -119,7 +120,7 @@ class AnnotationFilterCriteriaBuilder:
         """
         self.uncertainty_combo = QComboBox()
         self.uncertainty_combo.addItems(self.UNCERTAINTY_FILTER_LABELS)
-        form_layout.addRow("Uncertainty:", self.uncertain_combo)
+        form_layout.addRow("Uncertainty:", self.uncertainty_combo)
 
     def _add_missing_field_filters(self, form_layout: QFormLayout) -> None:
         """

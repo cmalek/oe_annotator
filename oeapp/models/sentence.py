@@ -7,10 +7,11 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from oeapp.db import Base
+from oeapp.models.note import Note
 from oeapp.models.token import Token
+from oeapp.utils import from_utc_iso, to_utc_iso
 
 if TYPE_CHECKING:
-    from oeapp.models.note import Note
     from oeapp.models.project import Project
 
 
@@ -108,6 +109,83 @@ class Sentence(Base):
         sentence.tokens = tokens
 
         session.commit()
+        return sentence
+
+    def to_json(self, session: Session) -> dict:
+        """
+        Serialize sentence to JSON-compatible dictionary (without PKs).
+
+        Args:
+            session: SQLAlchemy session (needed for token lookups in notes)
+
+        Returns:
+            Dictionary containing sentence data with tokens and notes
+
+        """
+        sentence_data: dict = {
+            "display_order": self.display_order,
+            "text_oe": self.text_oe,
+            "text_modern": self.text_modern,
+            "created_at": to_utc_iso(self.created_at),
+            "updated_at": to_utc_iso(self.updated_at),
+            "tokens": [],
+            "notes": [],
+        }
+
+        # Sort tokens by order_index
+        tokens = sorted(self.tokens, key=lambda t: t.order_index)
+        for token in tokens:
+            sentence_data["tokens"].append(token.to_json())
+
+        # Add notes
+        for note in self.notes:
+            note_data = note.to_json(session)
+            sentence_data["notes"].append(note_data)
+
+        return sentence_data
+
+    @classmethod
+    def from_json(
+        cls, session: Session, project_id: int, sentence_data: dict
+    ) -> Sentence:
+        """
+        Create a sentence and all related entities from JSON import data.
+
+        Args:
+            session: SQLAlchemy session
+            project_id: Project ID to attach sentence to
+            sentence_data: Sentence data dictionary from JSON
+
+        Returns:
+            Created Sentence entity
+
+        """
+        sentence = cls(
+            project_id=project_id,
+            display_order=sentence_data["display_order"],
+            text_oe=sentence_data["text_oe"],
+            text_modern=sentence_data.get("text_modern"),
+        )
+        created_at = from_utc_iso(sentence_data.get("created_at"))
+        if created_at:
+            sentence.created_at = created_at
+        updated_at = from_utc_iso(sentence_data.get("updated_at"))
+        if updated_at:
+            sentence.updated_at = updated_at
+
+        session.add(sentence)
+        session.flush()
+
+        # Create tokens and build token map
+        token_map: dict[int, Token] = {}
+        for token_data in sentence_data.get("tokens", []):
+            token = Token.from_json(session, sentence.id, token_data)
+            token_map[token.order_index] = token
+
+        # Create notes
+        for note_data in sentence_data.get("notes", []):
+            Note.from_json(session, sentence.id, note_data, token_map)
+
         return sentence
 
     def update(self, session, text_oe: str) -> Sentence:

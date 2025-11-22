@@ -1,7 +1,7 @@
 """Project model."""
 
-from datetime import datetime
 import re
+from datetime import datetime
 
 from sqlalchemy import DateTime, Integer, String, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 from oeapp.db import Base
 from oeapp.exc import AlreadyExists
 from oeapp.models.sentence import Sentence
+from oeapp.utils import from_utc_iso, to_utc_iso
 
 
 class Project(Base):
@@ -78,6 +79,48 @@ class Project(Base):
             )
 
         session.commit()
+        return project
+
+    def to_json(self) -> dict:
+        """
+        Serialize project to JSON-compatible dictionary (without PKs).
+
+        Returns:
+            Dictionary containing project data
+
+        """
+        return {
+            "name": self.name,
+            "created_at": to_utc_iso(self.created_at),
+            "updated_at": to_utc_iso(self.updated_at),
+        }
+
+    @classmethod
+    def from_json(
+        cls, session: Session, project_data: dict, resolved_name: str
+    ) -> Project:
+        """
+        Create a project from JSON import data.
+
+        Args:
+            session: SQLAlchemy session
+            project_data: Project data dictionary from JSON
+            resolved_name: Resolved project name (after collision handling)
+
+        Returns:
+            Created Project entity
+
+        """
+        project = cls(name=resolved_name)
+        created_at = from_utc_iso(project_data.get("created_at"))
+        if created_at:
+            project.created_at = created_at
+        updated_at = from_utc_iso(project_data.get("updated_at"))
+        if updated_at:
+            project.updated_at = updated_at
+
+        session.add(project)
+        session.flush()
         return project
 
     @classmethod

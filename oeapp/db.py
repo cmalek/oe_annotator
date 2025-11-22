@@ -224,6 +224,32 @@ def get_backup_app_version(backup_path: Path) -> str | None:
     return None
 
 
+def get_min_version_for_migration(migration_version: str) -> str | None:
+    """
+    Get the minimum app version required for a given migration version.
+
+    Args:
+        migration_version: Migration revision ID
+
+    Returns:
+        Minimum app version string, or None if not found
+
+    """
+    migration_versions_path = Path(__file__).parent / "etc" / "migration_versions.json"
+    if not migration_versions_path.exists():
+        return None
+
+    try:
+        with migration_versions_path.open("r", encoding="utf-8") as f:
+            migration_versions = json.load(f)
+    except (OSError, PermissionError, json.JSONDecodeError):
+        return None
+
+    if isinstance(migration_versions, dict):
+        return migration_versions.get(migration_version)
+    return None
+
+
 def apply_migrations() -> None:
     """
     Apply pending Alembic migrations.

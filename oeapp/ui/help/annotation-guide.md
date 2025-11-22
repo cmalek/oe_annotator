@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Old English Annotator allows you to add detailed morphological annotations
+The Ænglisc Toolkit allows you to add detailed morphological annotations
 to tokens in your text. Annotations include Part of Speech (POS), grammatical
 features, and metadata.
 

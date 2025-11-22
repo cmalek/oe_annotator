@@ -55,6 +55,8 @@ class HelpDialog(QDialog):
         "Annotation Guide": "annotation-guide.md",
         "Incremental Annotation": "incremental-annotation.md",
         "Export Formatting": "export-formatting.md",
+        "Project Export/Import": "project-export-import.md",
+        "Automatic Backups": "automatic-backups.md",
         "Morphological Reference": "morphological-reference.md",
         "Troubleshooting": "troubleshooting.md",
     }

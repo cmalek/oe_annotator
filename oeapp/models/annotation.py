@@ -4,9 +4,10 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from oeapp.db import Base
+from oeapp.utils import from_utc_iso, to_utc_iso
 
 if TYPE_CHECKING:
     from oeapp.models.token import Token
@@ -111,3 +112,80 @@ class Annotation(Base):
 
     # Relationships
     token: Mapped[Token] = relationship("Token", back_populates="annotation")
+
+    def to_json(self) -> dict:
+        """
+        Serialize annotation to JSON-compatible dictionary.
+
+        Returns:
+            Dictionary containing annotation data
+
+        """
+        return {
+            "pos": self.pos,
+            "gender": self.gender,
+            "number": self.number,
+            "case": self.case,
+            "declension": self.declension,
+            "article_type": self.article_type,
+            "pronoun_type": self.pronoun_type,
+            "verb_class": self.verb_class,
+            "verb_tense": self.verb_tense,
+            "verb_person": self.verb_person,
+            "verb_mood": self.verb_mood,
+            "verb_aspect": self.verb_aspect,
+            "verb_form": self.verb_form,
+            "prep_case": self.prep_case,
+            "uncertain": self.uncertain,
+            "alternatives_json": self.alternatives_json,
+            "confidence": self.confidence,
+            "last_inferred_json": self.last_inferred_json,
+            "modern_english_meaning": self.modern_english_meaning,
+            "root": self.root,
+            "updated_at": to_utc_iso(self.updated_at),
+        }
+
+    @classmethod
+    def from_json(cls, session: Session, token_id: int, ann_data: dict) -> Annotation:
+        """
+        Create an annotation from JSON import data.
+
+        Args:
+            session: SQLAlchemy session
+            token_id: Token ID to attach annotation to
+            ann_data: Annotation data dictionary from JSON
+
+        Returns:
+            Created Annotation entity
+
+        """
+
+        annotation = cls(
+            token_id=token_id,
+            pos=ann_data.get("pos"),
+            gender=ann_data.get("gender"),
+            number=ann_data.get("number"),
+            case=ann_data.get("case"),
+            declension=ann_data.get("declension"),
+            article_type=ann_data.get("article_type"),
+            pronoun_type=ann_data.get("pronoun_type"),
+            verb_class=ann_data.get("verb_class"),
+            verb_tense=ann_data.get("verb_tense"),
+            verb_person=ann_data.get("verb_person"),
+            verb_mood=ann_data.get("verb_mood"),
+            verb_aspect=ann_data.get("verb_aspect"),
+            verb_form=ann_data.get("verb_form"),
+            prep_case=ann_data.get("prep_case"),
+            uncertain=ann_data.get("uncertain", False),
+            alternatives_json=ann_data.get("alternatives_json"),
+            confidence=ann_data.get("confidence"),
+            last_inferred_json=ann_data.get("last_inferred_json"),
+            modern_english_meaning=ann_data.get("modern_english_meaning"),
+            root=ann_data.get("root"),
+        )
+        updated_at = from_utc_iso(ann_data.get("updated_at"))
+        if updated_at:
+            annotation.updated_at = updated_at
+
+        session.add(annotation)
+        return annotation
