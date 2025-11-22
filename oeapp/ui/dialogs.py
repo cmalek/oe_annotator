@@ -1,9 +1,10 @@
-from datetime import datetime
+import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -12,7 +13,9 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
@@ -21,10 +24,14 @@ from PySide6.QtWidgets import (
 )
 from sqlalchemy import select
 
+from oeapp.db import get_current_code_migration_version
 from oeapp.exc import AlreadyExists
 from oeapp.models.project import Project
+from oeapp.services.backup import BackupService
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from oeapp.ui.main_window import MainWindow
 
 
@@ -362,7 +369,8 @@ class OpenProjectDialog:
 
     def load_project_list(self) -> None:
         """
-         Update the project list in the table widget.
+        Update the project list in the table widget by loading projects from the
+        database.
 
         This looks up projects in the database and adds them to the table widget.
         If there are no projects, it shows a message and returns.
@@ -490,3 +498,527 @@ class OpenProjectDialog:
         self.build()
         if self.dialog.exec():
             self.open_project()
+
+
+class SettingsDialog:
+    """
+    Settings dialog for backup configuration.
+    """
+
+    #: Dialog width
+    DIALOG_WIDTH: Final[int] = 400
+    #: Dialog height
+    DIALOG_HEIGHT: Final[int] = 200
+
+    def __init__(self, main_window: MainWindow) -> None:
+        """
+        Initialize settings dialog.
+        """
+        self.main_window = main_window
+        self.settings = QSettings()
+
+    def build(self) -> None:
+        """
+        Build the settings dialog.
+        """
+        self.dialog = QDialog(self.main_window)
+        self.dialog.setWindowTitle("Preferences")
+        self.dialog.setMinimumSize(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
+        self.layout = QVBoxLayout(self.dialog)
+
+        # Number of backups
+        num_backups_label = QLabel("Number of backups to keep:")
+        self.num_backups_spin = QSpinBox(self.dialog)
+        self.num_backups_spin.setMinimum(1)
+        self.num_backups_spin.setMaximum(100)
+        num_backups_val = cast(
+            "int", self.settings.value("backup/num_backups", 5, type=int)
+        )
+        num_backups = int(num_backups_val) if num_backups_val is not None else 5
+        self.num_backups_spin.setValue(num_backups)
+        self.layout.addWidget(num_backups_label)
+        self.layout.addWidget(self.num_backups_spin)
+
+        # Backup interval
+        interval_label = QLabel("Backup interval (minutes):")
+        self.interval_spin = QSpinBox(self.dialog)
+        self.interval_spin.setMinimum(1)
+        self.interval_spin.setMaximum(1440)  # 24 hours
+        interval_val = cast(
+            "int", self.settings.value("backup/interval_minutes", 720, type=int)
+        )
+        interval = int(interval_val) if interval_val is not None else 720
+        self.interval_spin.setValue(interval)
+        self.layout.addWidget(interval_label)
+        self.layout.addWidget(self.interval_spin)
+
+        # Button box
+        self.button_box = QDialogButtonBox(self.dialog)
+        self.button_box.addButton(QDialogButtonBox.StandardButton.Ok)
+        self.button_box.addButton(QDialogButtonBox.StandardButton.Cancel)
+        self.button_box.accepted.connect(self.save_settings)
+        self.button_box.rejected.connect(self.dialog.reject)
+        self.layout.addWidget(self.button_box)
+
+    def save_settings(self) -> None:
+        """Save settings to QSettings."""
+        self.settings.setValue("backup/num_backups", self.num_backups_spin.value())
+        self.settings.setValue("backup/interval_minutes", self.interval_spin.value())
+        self.dialog.accept()
+
+    def execute(self) -> None:
+        """
+        Execute the settings dialog.
+        """
+        self.build()
+        self.dialog.exec()
+
+
+class RestoreDialog:
+    """
+    Restore dialog for selecting a backup to restore.
+    """
+
+    #: Dialog width
+    DIALOG_WIDTH: Final[int] = 700
+    #: Dialog height
+    DIALOG_HEIGHT: Final[int] = 500
+
+    def __init__(self, main_window: MainWindow) -> None:
+        """
+        Initialize restore dialog.
+        """
+        self.main_window = main_window
+
+    def build(self) -> None:
+        """
+        Build the restore dialog.
+        """
+        self.dialog = QDialog(self.main_window)
+        self.dialog.setWindowTitle("Restore Backup")
+        self.dialog.setMinimumSize(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
+        self.layout = QVBoxLayout(self.dialog)
+
+        # Create table widget
+        self.backup_table = QTableWidget(self.dialog)
+        self.backup_table.setColumnCount(4)
+        self.backup_table.setHorizontalHeaderLabels(
+            ["Backup Date/Time", "File Size", "Migration Version", "App Version"]
+        )
+        self.backup_table.setSortingEnabled(True)
+        self.backup_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.backup_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.backup_table.setAlternatingRowColors(True)
+        self.backup_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        # Configure column widths
+        header = self.backup_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.layout.addWidget(self.backup_table)
+        self.load_backup_list()
+        self._add_button_box()
+
+    def load_backup_list(self) -> None:
+        """
+        Load the list of available backups.
+        """
+        backup_service = BackupService()
+        backups = backup_service.get_backup_list()
+
+        # Disable sorting while populating
+        self.backup_table.setSortingEnabled(False)
+        self.backup_table.setRowCount(0)
+
+        if not backups:
+            self.main_window.show_information("No backups found.", title="No Backups")
+            self.backup_table.setSortingEnabled(True)
+            return
+
+        self.backup_table.setRowCount(len(backups))
+        for row, backup in enumerate(backups):
+            # Backup Date/Time - convert from UTC to local time for display
+            backup_time = backup["backup_timestamp"]
+            # If timezone-aware (UTC), convert to local time; otherwise assume
+            # already local
+            if backup_time.tzinfo is not None:
+                backup_time_local = backup_time.astimezone()
+                # Remove timezone info for display (naive datetime)
+                backup_time_local = backup_time_local.replace(tzinfo=None)
+            else:
+                backup_time_local = backup_time
+            time_str = backup_time_local.strftime("%b %d, %Y %I:%M %p")
+            time_item = DateTimeTableWidgetItem(time_str, backup_time_local)
+            time_item.setData(Qt.ItemDataRole.UserRole, backup["backup_path"])
+            self.backup_table.setItem(row, 0, time_item)
+
+            # File Size
+            size_str = f"{backup['file_size'] / 1024:.1f} KB"
+            size_item = QTableWidgetItem(size_str)
+            self.backup_table.setItem(row, 1, size_item)
+
+            # Migration Version
+            migration_version = backup.get("migration_version") or "Unknown"
+            migration_item = QTableWidgetItem(migration_version)
+            self.backup_table.setItem(row, 2, migration_item)
+
+            # App Version
+            app_version = backup.get("application_version") or "Unknown"
+            app_item = QTableWidgetItem(app_version)
+            self.backup_table.setItem(row, 3, app_item)
+
+        # Re-enable sorting after population
+        self.backup_table.setSortingEnabled(True)
+
+    def _add_button_box(self) -> None:
+        """
+        Add the button box to the dialog.
+        """
+        self.button_box = QDialogButtonBox(self.dialog)
+        self.button_box.addButton(QDialogButtonBox.StandardButton.Ok)
+        self.button_box.addButton(QDialogButtonBox.StandardButton.Cancel)
+        self.button_box.accepted.connect(self.restore_backup)
+        self.button_box.rejected.connect(self.dialog.reject)
+        self.layout.addWidget(self.button_box)
+
+    def restore_backup(self) -> None:
+        """
+        Restore the selected backup.
+        """
+        # Get the selected row
+        selected_row = self.backup_table.currentRow()
+        if selected_row < 0:
+            self.main_window.show_warning("Please select a backup to restore.")
+            return
+
+        time_item = self.backup_table.item(selected_row, 0)
+        if not time_item:
+            return
+
+        backup_path = time_item.data(Qt.ItemDataRole.UserRole)
+        if not backup_path:
+            return
+
+        # Confirm restore
+        reply = QMessageBox.question(
+            self.dialog,
+            "Confirm Restore",
+            "This will replace your current database with the selected backup.\n"
+            "A backup of your current database will be created first.\n\n"
+            "Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # Restore backup
+        backup_service = BackupService()
+        metadata = backup_service.restore_backup(Path(backup_path))
+
+        if metadata:
+            # Check for version mismatch
+            backup_migration = metadata.get("migration_version")
+            current_code_migration = get_current_code_migration_version()
+
+            if backup_migration and current_code_migration:
+                if backup_migration != current_code_migration:
+                    self.main_window.show_warning(
+                        f"The restored backup was created with migration version "
+                        f"{backup_migration}, but your application expects version "
+                        f"{current_code_migration}.\n\n"
+                        "You may experience SQL errors. Consider downgrading your "
+                        "application to match the backup version.",
+                        title="Version Mismatch",
+                    )
+
+            settings = QSettings()
+            if backup_migration:
+                settings.setValue("migration/last_working_version", backup_migration)
+
+            self.main_window.show_information(
+                "Backup restored successfully. Please restart the application.",
+                title="Restore Complete",
+            )
+            self.dialog.accept()
+        else:
+            self.main_window.show_error("Failed to restore backup.")
+
+    def execute(self) -> None:
+        """
+        Execute the restore dialog.
+        """
+        self.build()
+        self.dialog.exec()
+
+
+class BackupsViewDialog:
+    """
+    Dialog to view backup information.
+    """
+
+    #: Dialog width
+    DIALOG_WIDTH: Final[int] = 800
+    #: Dialog height
+    DIALOG_HEIGHT: Final[int] = 600
+
+    def __init__(self, main_window: MainWindow) -> None:
+        """
+        Initialize backups view dialog.
+        """
+        self.main_window = main_window
+
+    def build(self) -> None:
+        """
+        Build the backups view dialog.
+        """
+        self.dialog = QDialog(self.main_window)
+        self.dialog.setWindowTitle("Backups")
+        self.dialog.setMinimumSize(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
+        self.layout = QVBoxLayout(self.dialog)
+
+        # Create table widget
+        self.backup_table = QTableWidget(self.dialog)
+        self.backup_table.setColumnCount(5)
+        self.backup_table.setHorizontalHeaderLabels(
+            [
+                "Backup Date/Time",
+                "File Size",
+                "Migration Version",
+                "App Version",
+                "Projects",
+            ]
+        )
+        self.backup_table.setSortingEnabled(True)
+        self.backup_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.backup_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.backup_table.setAlternatingRowColors(True)
+        self.backup_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        # Configure column widths
+        header = self.backup_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.layout.addWidget(self.backup_table)
+        self.load_backup_list()
+        self._add_button_box()
+
+    def load_backup_list(self) -> None:
+        """
+        Load the list of available backups.
+        """
+        backup_service = BackupService()
+        backups = backup_service.get_backup_list()
+
+        # Disable sorting while populating
+        self.backup_table.setSortingEnabled(False)
+        self.backup_table.setRowCount(0)
+
+        if not backups:
+            self.main_window.show_information("No backups found.", title="No Backups")
+            self.backup_table.setSortingEnabled(True)
+            return
+
+        self.backup_table.setRowCount(len(backups))
+        for row, backup in enumerate(backups):
+            # Backup Date/Time - convert from UTC to local time for display
+            backup_time = backup["backup_timestamp"]
+            # If timezone-aware (UTC), convert to local time; otherwise assume
+            # already local
+            if backup_time.tzinfo is not None:
+                backup_time_local = backup_time.astimezone()
+                # Remove timezone info for display (naive datetime)
+                backup_time_local = backup_time_local.replace(tzinfo=None)
+            else:
+                backup_time_local = backup_time
+            time_str = backup_time_local.strftime("%b %d, %Y %I:%M %p")
+            time_item = DateTimeTableWidgetItem(time_str, backup_time_local)
+            time_item.setData(Qt.ItemDataRole.UserRole, backup)
+            self.backup_table.setItem(row, 0, time_item)
+
+            # File Size
+            size_str = f"{backup['file_size'] / 1024:.1f} KB"
+            size_item = QTableWidgetItem(size_str)
+            self.backup_table.setItem(row, 1, size_item)
+
+            # Migration Version
+            migration_version = backup.get("migration_version") or "Unknown"
+            migration_item = QTableWidgetItem(migration_version)
+            self.backup_table.setItem(row, 2, migration_item)
+
+            # App Version
+            app_version = backup.get("application_version") or "Unknown"
+            app_item = QTableWidgetItem(app_version)
+            self.backup_table.setItem(row, 3, app_item)
+
+            # Number of Projects / Total Tokens
+            projects = backup.get("projects", [])
+            num_projects = len(projects)
+            total_tokens = sum(p.get("token_count", 0) for p in projects)
+            projects_str = f"{num_projects} project(s), {total_tokens} token(s)"
+            projects_item = QTableWidgetItem(projects_str)
+            self.backup_table.setItem(row, 4, projects_item)
+
+        # Re-enable sorting after population
+        self.backup_table.setSortingEnabled(True)
+
+    def _add_button_box(self) -> None:
+        """
+        Add the button box to the dialog.
+        """
+        self.button_box = QDialogButtonBox(self.dialog)
+        self.button_box.addButton(QDialogButtonBox.StandardButton.Close)
+        self.button_box.rejected.connect(self.dialog.reject)
+        self.layout.addWidget(self.button_box)
+
+    def execute(self) -> None:
+        """
+        Execute the backups view dialog.
+        """
+        self.build()
+        self.dialog.exec()
+
+
+class MigrationFailureDialog:
+    """
+    Dialog shown when migration fails during startup.
+    """
+
+    #: Dialog width
+    DIALOG_WIDTH: Final[int] = 700
+    #: Dialog height
+    DIALOG_HEIGHT: Final[int] = 500
+
+    def __init__(
+        self,
+        main_window: MainWindow,
+        error: Exception,
+        backup_app_version: str | None,
+    ) -> None:
+        """
+        Initialize migration failure dialog.
+
+        Args:
+            main_window: Main window instance
+            error: The exception that occurred during migration
+            backup_app_version: Application version from the restored backup
+
+        """
+        self.main_window = main_window
+        self.error = error
+        self.backup_app_version = backup_app_version
+
+    def build(self) -> None:
+        """
+        Build the migration failure dialog.
+        """
+        self.dialog = QDialog(self.main_window)
+        self.dialog.setWindowTitle("Migration Failed")
+        self.dialog.setMinimumSize(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
+        self.layout = QVBoxLayout(self.dialog)
+
+        # Error message
+        error_label = QLabel(
+            "Database migration failed during startup.\n\n"
+            "Your database has been automatically restored to the backup created "
+            "before the migration attempt.\n\n"
+        )
+        if self.backup_app_version:
+            error_label.setText(
+                error_label.text()
+                + f"To continue working, please downgrade to application version "
+                f"{self.backup_app_version}.\n\n"
+                f"The restored backup was created with application version "
+                f"{self.backup_app_version}."
+            )
+        error_label.setWordWrap(True)
+        self.layout.addWidget(error_label)
+
+        # Stack trace
+        trace_label = QLabel("Stack Trace:")
+        self.layout.addWidget(trace_label)
+
+        trace_text = QTextEdit(self.dialog)
+        trace_text.setReadOnly(True)
+        trace_str = "".join(
+            traceback.format_exception(
+                type(self.error), self.error, self.error.__traceback__
+            )
+        )
+        trace_text.setPlainText(trace_str)
+        trace_text.setMinimumHeight(200)
+        self.layout.addWidget(trace_text)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+
+        save_button = QPushButton("Save Stack Trace")
+        save_button.clicked.connect(self.save_stack_trace)
+        button_layout.addWidget(save_button)
+
+        copy_button = QPushButton("Copy to Clipboard")
+        copy_button.clicked.connect(self.copy_to_clipboard)
+        button_layout.addWidget(copy_button)
+
+        button_layout.addStretch()
+
+        exit_button = QPushButton("Exit Application")
+        exit_button.clicked.connect(self.dialog.accept)
+        button_layout.addWidget(exit_button)
+
+        self.layout.addLayout(button_layout)
+
+    def save_stack_trace(self) -> None:
+        """Save stack trace to file."""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self.dialog,
+            "Save Stack Trace",
+            "",
+            "Text Files (*.txt);;All Files (*)",
+        )
+        if file_path:
+            # Format stack trace (should not fail)
+            trace_str = "".join(
+                traceback.format_exception(
+                    type(self.error), self.error, self.error.__traceback__
+                )
+            )
+            # Write to file - can fail with file system errors
+            try:
+                Path(file_path).write_text(trace_str, encoding="utf-8")
+            except (OSError, PermissionError) as e:
+                self.main_window.show_error(f"Failed to save stack trace: {e}")
+                return
+
+            self.main_window.show_information(
+                f"Stack trace saved to:\n{file_path}", title="Saved"
+            )
+
+    def copy_to_clipboard(self) -> None:
+        """Copy stack trace to clipboard."""
+        clipboard = QApplication.clipboard()
+        trace_str = "".join(
+            traceback.format_exception(
+                type(self.error), self.error, self.error.__traceback__
+            )
+        )
+        clipboard.setText(trace_str)
+        self.main_window.show_message("Stack trace copied to clipboard")
+
+    def execute(self) -> None:
+        """
+        Execute the migration failure dialog.
+        """
+        self.build()
+        self.dialog.exec()

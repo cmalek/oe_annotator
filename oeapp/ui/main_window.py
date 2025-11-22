@@ -1,19 +1,18 @@
 """Main application window."""
 
+import sys
 from pathlib import Path
 from typing import Final, cast
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
-    QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
+    QMenu,
+    QMenuBar,
     QMessageBox,
     QScrollArea,
     QVBoxLayout,
@@ -25,10 +24,18 @@ from oeapp.db import SessionLocal, apply_migrations
 from oeapp.models.project import Project
 from oeapp.models.token import Token
 from oeapp.services.autosave import AutosaveService
+from oeapp.services.backup import BackupService
 from oeapp.services.commands import CommandManager, MergeSentenceCommand
 from oeapp.services.export_docx import DOCXExporter
 from oeapp.services.filter import FilterService
-from oeapp.ui.dialogs import NewProjectDialog, OpenProjectDialog
+from oeapp.ui.dialogs import (
+    BackupsViewDialog,
+    MigrationFailureDialog,
+    NewProjectDialog,
+    OpenProjectDialog,
+    RestoreDialog,
+    SettingsDialog,
+)
 from oeapp.ui.filter_dialog import FilterDialog
 from oeapp.ui.help_dialog import HelpDialog
 from oeapp.ui.sentence_card import SentenceCard
@@ -64,40 +71,99 @@ class MainMenu:
         - Filter Annotations...
 
         """
-        file_menu = self.menu.addMenu("&File")
+        # Store reference for preferences menu
+        self.file_menu = self.menu.addMenu("&File")
 
-        new_action = QAction("&New Project...", file_menu)
+        new_action = QAction("&New Project...", self.file_menu)
         new_action.setShortcut(QKeySequence("Ctrl+N"))
         new_action.triggered.connect(
             lambda: NewProjectDialog(self.main_window).execute()
         )
-        file_menu.addAction(new_action)
+        self.file_menu.addAction(new_action)
 
-        open_action = QAction("&Open Project...", file_menu)
+        open_action = QAction("&Open Project...", self.file_menu)
         open_action.setShortcut(QKeySequence("Ctrl+O"))
         open_action.triggered.connect(
             lambda: OpenProjectDialog(self.main_window).execute()
         )
-        file_menu.addAction(open_action)
+        self.file_menu.addAction(open_action)
 
-        file_menu.addSeparator()
+        self.file_menu.addSeparator()
 
-        save_action = QAction("&Save", file_menu)
+        save_action = QAction("&Save", self.file_menu)
         save_action.setShortcut(QKeySequence("Ctrl+S"))
         save_action.triggered.connect(self.main_window.save_project)
-        file_menu.addAction(save_action)
+        self.file_menu.addAction(save_action)
 
-        export_action = QAction("&Export...", file_menu)
+        export_action = QAction("&Export...", self.file_menu)
         export_action.setShortcut(QKeySequence("Ctrl+E"))
         export_action.triggered.connect(self.main_window.export_project)
-        file_menu.addAction(export_action)
+        self.file_menu.addAction(export_action)
 
-        file_menu.addSeparator()
+        self.file_menu.addSeparator()
 
-        filter_action = QAction("&Filter Annotations...", file_menu)
+        filter_action = QAction("&Filter Annotations...", self.file_menu)
         filter_action.setShortcut(QKeySequence("Ctrl+F"))
         filter_action.triggered.connect(self.main_window.show_filter_dialog)
-        file_menu.addAction(filter_action)
+        self.file_menu.addAction(filter_action)
+
+    def add_tools_menu(self) -> None:
+        """
+        Create tools menu.
+
+        This means adding a "Tools" menu to :attr:`self.menu`, the main menu bar,
+        with the following actions:
+
+        - Backup Now
+        - Restore...
+        - Backups...
+        """
+        tools_menu = self.menu.addMenu("&Tools")
+
+        backup_action = QAction("&Backup Now", tools_menu)
+        backup_action.triggered.connect(self.main_window.backup_now)
+        tools_menu.addAction(backup_action)
+
+        restore_action = QAction("&Restore...", tools_menu)
+        restore_action.triggered.connect(self.main_window.show_restore_dialog)
+        tools_menu.addAction(restore_action)
+
+        backups_view_action = QAction("&Backups...", tools_menu)
+        backups_view_action.triggered.connect(self.main_window.show_backups_dialog)
+        tools_menu.addAction(backups_view_action)
+
+    def add_preferences_menu(self) -> None:
+        """
+        Create preferences/settings menu item.
+
+        On macOS, this goes in the application menu.
+        On Windows/Linux, this goes in the File menu.
+        """
+        if sys.platform == "darwin":
+            # macOS: Add to application menu (first menu, typically app name)
+            # The application menu is automatically created by Qt on macOS
+            # We need to find it by looking for menus
+
+            menu_bar = self.main_window.menuBar()
+            if isinstance(menu_bar, QMenuBar):
+                actions = menu_bar.actions()
+                if actions:
+                    app_menu_action = actions[0]
+                    app_menu = app_menu_action.menu()
+                    if isinstance(app_menu, QMenu):
+                        app_menu.addSeparator()
+                        preferences_action = QAction("&Preferences...", app_menu)
+                        preferences_action.setShortcut(QKeySequence("Ctrl+,"))
+                        preferences_action.triggered.connect(
+                            self.main_window.show_settings_dialog
+                        )
+                        app_menu.addAction(preferences_action)
+        else:
+            # Windows/Linux: Add to File menu
+            self.file_menu.addSeparator()
+            settings_action = QAction("&Settings...", self.file_menu)
+            settings_action.triggered.connect(self.main_window.show_settings_dialog)
+            self.file_menu.addAction(settings_action)
 
     def add_help_menu(self) -> None:
         """
@@ -118,7 +184,10 @@ class MainMenu:
     def build(self) -> None:
         """Build the main menu."""
         self.add_file_menu()
+        self.add_tools_menu()
         self.add_help_menu()
+        # Add preferences after menus are built so we can find the right place
+        self.add_preferences_menu()
 
 
 class MainWindow(QMainWindow):
@@ -129,8 +198,15 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        # Apply migrations on startup
-        apply_migrations()
+        #: Backup service
+        self.backup_service = BackupService()
+        #: Backup check timer
+        self.backup_timer: QTimer | None = None
+
+        # Handle migrations with backup/restore on failure
+        # Note: session is created after migrations to avoid issues
+        self._handle_migrations()
+
         #: SQLAlchemy session
         self.session = SessionLocal()
         #: Current project ID
@@ -148,6 +224,9 @@ class MainWindow(QMainWindow):
 
         # Build the main window
         self.build()
+
+        # Setup backup checking
+        self._setup_backup_checking()
 
     def _setup_main_window(self) -> None:
         """
@@ -197,6 +276,87 @@ class MainWindow(QMainWindow):
         self._setup_main_window()
         self._setup_main_menu()
         self._setup_global_shortcuts()
+
+    def _handle_migrations(self) -> None:
+        """
+        Handle database migrations with automatic backup and restore on failure.
+        """
+        from oeapp.db import get_current_code_migration_version
+
+        settings = QSettings()
+
+        # Check if we should skip migrations
+        skip_until_version = settings.value(
+            "migration/skip_until_version", None, type=str
+        )
+        if skip_until_version:
+            # Create a temporary engine to check current version
+            from oeapp.db import create_engine_with_path
+
+            temp_engine = create_engine_with_path()
+            current_db_version = self.backup_service.get_current_migration_version(
+                temp_engine
+            )
+            temp_engine.dispose()
+            # Compare versions as strings (Alembic versions are hex strings)
+            if current_db_version and str(current_db_version) < str(skip_until_version):
+                # Skip migrations - user has chosen to stay on older version
+                return
+
+        # Check if backup is needed
+        if self.backup_service.should_backup():
+            self.backup_service.create_backup()
+
+        # Create backup before attempting migration (if needed)
+        backup_path = None
+        if self.backup_service.should_backup():
+            backup_path = self.backup_service.create_backup()
+
+        # Always try to apply migrations
+        try:
+            apply_migrations()
+            # Migration succeeded - continue normally
+        except Exception as e:
+            # Migration failed - restore backup if we have one
+            if backup_path:
+                metadata = self.backup_service.restore_backup(backup_path)
+                backup_app_version = None
+                if metadata:
+                    backup_app_version = metadata.get("application_version")
+
+                # Update settings
+                if metadata and metadata.get("migration_version"):
+                    settings.setValue(
+                        "migration/last_working_version",
+                        metadata["migration_version"],
+                    )
+
+                # Show error dialog
+                dialog = MigrationFailureDialog(self, e, backup_app_version)
+                dialog.execute()
+
+                # Exit application
+                sys.exit(1)
+            else:
+                # No backup available - this is bad, but try to continue
+                print(f"Migration error and no backup available: {e}")  # noqa: T201
+
+    def _setup_backup_checking(self) -> None:
+        """Setup periodic backup checking."""
+        # Check every 5 minutes if backup is needed
+        self.backup_timer = QTimer(self)
+        self.backup_timer.timeout.connect(self._check_backup)
+        self.backup_timer.start(5 * 60 * 1000)  # 5 minutes in milliseconds
+
+        # Also check on startup
+        self._check_backup()
+
+    def _check_backup(self) -> None:
+        """Check if backup is needed and create one if so."""
+        if self.backup_service.should_backup():
+            backup_path = self.backup_service.create_backup()
+            if backup_path:
+                self.show_message("Backup created", duration=2000)
 
     def _show_startup_dialog(self) -> None:
         """
@@ -435,6 +595,46 @@ class MainWindow(QMainWindow):
         )
         dialog.token_selected.connect(self.action_service.navigate_to_token)
         dialog.exec()
+
+    def show_settings_dialog(self) -> None:
+        """
+        Show settings dialog.
+        """
+        dialog = SettingsDialog(self)
+        dialog.execute()
+
+    def show_restore_dialog(self) -> None:
+        """
+        Show restore dialog.
+        """
+        dialog = RestoreDialog(self)
+        dialog.execute()
+        # After restore, we may need to reload
+        if self.current_project_id:
+            project = self.session.get(Project, self.current_project_id)
+            if project:
+                self._configure_project(project)
+
+    def show_backups_dialog(self) -> None:
+        """
+        Show backups view dialog.
+        """
+        dialog = BackupsViewDialog(self)
+        dialog.execute()
+
+    def backup_now(self) -> None:
+        """
+        Create a backup immediately.
+        """
+        backup_path = self.backup_service.create_backup()
+        if backup_path:
+            self.show_information(
+                f"Backup created successfully:\n{backup_path.name}",
+                title="Backup Complete",
+            )
+            self.show_message("Backup created", duration=2000)
+        else:
+            self.show_error("Failed to create backup.")
 
     def _on_sentence_merged(self) -> None:
         """
