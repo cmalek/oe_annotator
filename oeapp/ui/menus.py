@@ -111,6 +111,10 @@ class FileMenu:
         )
         self.file_menu.addAction(open_action)
 
+        delete_action = QAction("&Delete Project...", self.file_menu)
+        delete_action.triggered.connect(self.main_window.action_service.delete_project)
+        self.file_menu.addAction(delete_action)
+
         self.file_menu.addSeparator()
 
         save_action = QAction("&Save", self.file_menu)

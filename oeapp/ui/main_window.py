@@ -32,6 +32,7 @@ from oeapp.services.filter import FilterService
 from oeapp.services.import_export import ProjectExporter, ProjectImporter
 from oeapp.ui.dialogs import (
     BackupsViewDialog,
+    DeleteProjectDialog,
     ImportProjectDialog,
     MigrationFailureDialog,
     NewProjectDialog,
@@ -449,27 +450,45 @@ class MainWindow(QMainWindow):
         else:
             self.show_error("Failed to create backup.")
 
-    def export_project_json(self) -> None:
+    def export_project_json(
+        self, project_id: int | None = None, parent: QWidget | None = None
+    ) -> bool:
         """
         Export project to JSON format.
+
+        Args:
+            project_id: Optional project ID to export. If not provided, uses
+                current_project_id.
+            parent: Optional parent widget for the file dialog. If not provided,
+                uses self.
+
+        Returns:
+            True if export was successful, False if canceled or failed
+
         """
-        if not self.session or not self.current_project_id:
+        # Use provided project_id or fall back to current_project_id
+        target_project_id = (
+            project_id if project_id is not None else self.current_project_id
+        )
+
+        if not self.session or not target_project_id:
             self.show_warning("No project open")
-            return
+            return False
 
         # Get project name for default filename
-        project = self.session.get(Project, self.current_project_id)
+        project = self.session.get(Project, target_project_id)
         if project is None:
             self.show_warning("Project not found")
-            return
+            return False
 
         # Generate default filename: project name (lowercased, whitespace -> _)
         # + ".json"
         default_filename = project.name.lower().replace(" ", "_") + ".json"
 
         # Get file path from user
+        dialog_parent = parent if parent is not None else self
         file_path, _ = QFileDialog.getSaveFileName(
-            self,
+            dialog_parent,
             "Export Project",
             default_filename,
             "JSON Files (*.json);;All Files (*)",
@@ -477,7 +496,7 @@ class MainWindow(QMainWindow):
 
         # If the user cancels the dialog, do nothing
         if not file_path:
-            return
+            return False
 
         # Ensure .json extension
         if not file_path.endswith(".json"):
@@ -486,10 +505,10 @@ class MainWindow(QMainWindow):
         # Export project data
         exporter = ProjectExporter(self.session)
         try:
-            project_data = exporter.export_project(self.current_project_id)
+            project_data = exporter.export_project(target_project_id)
         except ValueError as e:
             self.show_error(str(e), title="Export Error")
-            return
+            return False
 
         # Write JSON to file
         try:
@@ -499,18 +518,19 @@ class MainWindow(QMainWindow):
             self.show_error(
                 f"Failed to write export file:\n{e!s}", title="Export Error"
             )
-            return
+            return False
         except (TypeError, ValueError) as e:
             self.show_error(
                 f"Failed to serialize project data:\n{e!s}", title="Export Error"
             )
-            return
+            return False
 
         self.show_information(
             f"Project exported successfully to:\n{file_path}",
             title="Export Successful",
         )
         self.show_message("Export completed", duration=3000)
+        return True
 
     def _on_sentence_merged(self) -> None:
         """
@@ -868,6 +888,25 @@ class MainWindowActions:
             self.main_window.show_error(
                 f"An error occurred during import:\n{e!s}", title="Import Error"
             )
+
+    def delete_project(self) -> None:
+        """
+        Delete a project from the database.
+
+        Creates a backup before deletion and opens DeleteProjectDialog.
+        """
+        # Create backup before any destructive action
+        backup_path = self.main_window.backup_service.create_backup()
+        if not backup_path:
+            self.main_window.show_error(
+                "Failed to create backup. Deletion cancelled for safety.",
+                title="Backup Failed",
+            )
+            return
+
+        # Open delete project dialog
+        dialog = DeleteProjectDialog(self.main_window)
+        dialog.execute()
 
     def export_project_docx(self) -> None:
         """
