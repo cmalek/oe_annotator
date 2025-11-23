@@ -598,6 +598,9 @@ class MainWindow(QMainWindow):
             ):
                 # Refresh sidebar with updated annotation
                 token = self.selected_sentence_card.tokens[token_index]
+                # Refresh token from database to ensure annotation relationship is up-to-date
+                if self.session:
+                    self.session.refresh(token)
                 self.token_details_sidebar.update_token(
                     token, self.selected_sentence_card.sentence
                 )

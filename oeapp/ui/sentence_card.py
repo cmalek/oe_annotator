@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, ClassVar, cast
 
-from PySide6.QtCore import QPoint, Signal
+from PySide6.QtCore import QPoint, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -132,6 +132,11 @@ class SentenceCard(QWidget):
         self._current_highlight_mode: str | None = None
         # Track selected token index for details sidebar
         self.selected_token_index: int | None = None
+        # Timer to delay deselection to allow double-click to cancel it
+        self._deselect_timer = QTimer(self)
+        self._deselect_timer.setSingleShot(True)
+        self._deselect_timer.timeout.connect(self._perform_deselection)
+        self._pending_deselect_token_index: int | None = None
         self._setup_ui()
         self._setup_shortcuts()
 
@@ -437,14 +442,16 @@ class SentenceCard(QWidget):
         # surface text spans that position
         token_index = self._find_token_at_position(text, cursor_pos)
         if token_index is not None:
-            # Check if clicking the same token (deselect if so)
+            # Cancel any pending deselection (in case this is part of a double-click)
+            if self._deselect_timer.isActive():
+                self._deselect_timer.stop()
+                self._pending_deselect_token_index = None
+
+            # Check if clicking the same token (schedule deselection after delay)
             if self.selected_token_index == token_index:
-                self.selected_token_index = None
-                self._clear_highlight()
-                # Emit signal to clear sidebar - pass current token but main
-                # window will check selected_token_index
-                token = self.tokens[token_index]
-                self.token_selected_for_details.emit(token, self.sentence, self)
+                # Schedule deselection with a delay to allow double-click to cancel it
+                self._pending_deselect_token_index = token_index
+                self._deselect_timer.start(300)  # 300ms delay, typical double-click timeout
             else:
                 # Select the token and emit signal for sidebar
                 self.selected_token_index = token_index
@@ -472,10 +479,18 @@ class SentenceCard(QWidget):
         # Find which token contains this cursor position
         token_index = self._find_token_at_position(text, cursor_pos)
         if token_index is not None:
+            # Cancel any pending deselection timer (from single-click)
+            if self._deselect_timer.isActive():
+                self._deselect_timer.stop()
+                self._pending_deselect_token_index = None
             # Select the token in the table
             self.token_table.select_token(token_index)
-            # Open the annotation modal for this token
+            # Set selected token index and update sidebar
+            self.selected_token_index = token_index
             token = self.tokens[token_index]
+            self._highlight_token_in_text(token)
+            self.token_selected_for_details.emit(token, self.sentence, self)
+            # Open the annotation modal for this token
             # Get or create annotation
             annotation = token.annotation
             if annotation is None and self.session and token.id:
@@ -1108,10 +1123,28 @@ class SentenceCard(QWidget):
         self.token_table.table.clearFocus()
         self.token_table.select_token(0)
 
+    def _perform_deselection(self) -> None:
+        """
+        Perform deselection if still pending. Called by timer after delay.
+        """
+        if self._pending_deselect_token_index is not None:
+            # Only deselect if the token index still matches (user didn't select different token)
+            if self.selected_token_index == self._pending_deselect_token_index:
+                self.selected_token_index = None
+                self._clear_highlight()
+                # Emit signal to clear sidebar
+                token = self.tokens[self._pending_deselect_token_index]
+                self.token_selected_for_details.emit(token, self.sentence, self)
+            self._pending_deselect_token_index = None
+
     def _clear_token_selection(self) -> None:
         """
         Clear token selection and highlight.
         """
+        # Cancel any pending deselection timer
+        if self._deselect_timer.isActive():
+            self._deselect_timer.stop()
+        self._pending_deselect_token_index = None
         self.selected_token_index = None
         self._clear_highlight()
         # Emit signal with None to clear sidebar (main window will handle it)
