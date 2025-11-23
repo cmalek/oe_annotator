@@ -32,7 +32,6 @@ from oeapp.services.backup import BackupService
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from oeapp.models.project import Project
     from oeapp.ui.main_window import MainWindow
 
 
@@ -1042,7 +1041,10 @@ class ImportProjectDialog:
     DIALOG_HEIGHT: Final[int] = 200
 
     def __init__(
-        self, main_window: MainWindow, project: Project, was_renamed: bool  # noqa: FBT001
+        self,
+        main_window: MainWindow,
+        project: Project,
+        was_renamed: bool,  # noqa: FBT001
     ) -> None:
         """
         Initialize import project dialog.

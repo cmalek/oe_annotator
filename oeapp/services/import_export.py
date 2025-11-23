@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
-def _get_migration_chain(from_version: str, to_version: str) -> list[str]:
+def _get_migration_chain(from_version: str, to_version: str) -> list[str]:  # noqa: PLR0912
     """
     Get ordered list of migration revision IDs from one version to another.
 
@@ -239,7 +239,7 @@ class ProjectImportProcessor:
             migration_chain = _get_migration_chain(export_version, current_code_version)
             if migration_chain:
                 data = self._apply_field_mappings(data, migration_chain)
-        except Exception:
+        except (KeyError, AttributeError, TypeError):
             # If we can't get chain, proceed without field mapping
             # Compatibility was already checked in _validate_migration_version
             pass

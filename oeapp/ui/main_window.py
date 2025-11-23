@@ -98,9 +98,11 @@ class MainMenu:
         save_action.triggered.connect(self.main_window.save_project)
         self.file_menu.addAction(save_action)
 
-        export_action = QAction("&Export...", self.file_menu)
+        export_action = QAction("&DOCX Export...", self.file_menu)
         export_action.setShortcut(QKeySequence("Ctrl+E"))
-        export_action.triggered.connect(self.main_window.export_project)
+        export_action.triggered.connect(
+            self.main_window.action_service.export_project_docx
+        )
         self.file_menu.addAction(export_action)
 
         self.file_menu.addSeparator()
@@ -550,45 +552,6 @@ class MainWindow(QMainWindow):
             self.show_message("Project saved")
         else:
             self.show_information("Project saved (autosave enabled)", title="Info")
-
-    def export_project(self) -> None:
-        """
-        Export project to DOCX.
-        """
-        if not self.session or not self.current_project_id:
-            self.show_warning("No project open")
-            return
-
-        # Get file path from user
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Export Project", "", "Word Documents (*.docx);;All Files (*)"
-        )
-
-        # If the user cancels the dialog, do nothing.
-        if not file_path:
-            return
-
-        # Ensure .docx extension
-        if not file_path.endswith(".docx"):
-            file_path += ".docx"
-
-        try:
-            exporter = DOCXExporter(self.session)
-            if exporter.export(self.current_project_id, Path(file_path)):
-                self.show_information(
-                    f"Project exported successfully to:\n{file_path}",
-                    title="Export Successful",
-                )
-                self.show_message("Export completed", duration=3000)
-            else:
-                self.show_warning(
-                    "Failed to export project. Check console for details.",
-                    title="Export Failed",
-                )
-        except Exception as e:
-            self.show_error(
-                f"An error occurred during export:\n{e!s}", title="Export Error"
-            )
 
     def show_help(self, topic: str | None = None) -> None:
         """
@@ -1074,12 +1037,12 @@ class MainWindowActions:
 
         except ValueError as e:
             self.main_window.show_error(str(e), title="Import Error")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.main_window.show_error(
                 f"An error occurred during import:\n{e!s}", title="Import Error"
             )
 
-    def export_project(self) -> None:
+    def export_project_docx(self) -> None:
         """
         Export project to DOCX.
         """
@@ -1103,20 +1066,32 @@ class MainWindowActions:
         if not file_path.endswith(".docx"):
             file_path += ".docx"
 
+        exporter = DOCXExporter(self.session)
         try:
-            exporter = DOCXExporter(self.session)
-            if exporter.export(self.main_window.current_project_id, Path(file_path)):
-                self.main_window.show_information(
-                    f"Project exported successfully to:\n{file_path}",
-                    title="Export Successful",
-                )
-                self.main_window.show_message("Export completed", duration=3000)
-            else:
-                self.main_window.show_warning(
-                    "Failed to export project. Check console for details.",
-                    title="Export Failed",
-                )
-        except Exception as e:
+            export_success = exporter.export(
+                self.main_window.current_project_id, Path(file_path)
+            )
+        except PermissionError as e:
             self.main_window.show_error(
-                f"An error occurred during export:\n{e!s}", title="Export Error"
+                f"Export failed: Permission denied.\n{e!s}",
+                title="Export Error",
+            )
+            return
+        except OSError as e:
+            self.main_window.show_error(
+                f"Export failed: File not found.\n{e!s}",
+                title="Export Error",
+            )
+            return
+
+        if export_success:
+            self.main_window.show_information(
+                f"Project exported successfully to:\n{file_path}",
+                title="Export Successful",
+            )
+            self.main_window.show_message("Export completed", duration=3000)
+        else:
+            self.main_window.show_warning(
+                "Failed to export project. Check console for details.",
+                title="Export Failed",
             )
