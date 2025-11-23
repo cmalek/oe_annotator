@@ -3,7 +3,15 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    select,
+)
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from oeapp.db import Base
@@ -112,6 +120,13 @@ class Annotation(Base):
 
     # Relationships
     token: Mapped[Token] = relationship("Token", back_populates="annotation")
+
+    @classmethod
+    def exists(cls, session: Session, token_id: int) -> bool:
+        """
+        Check if an annotation exists for a token.
+        """
+        return session.scalar(select(cls).where(cls.token_id == token_id)) is not None
 
     @classmethod
     def get(cls, session: Session, annotation_id: int) -> Annotation | None:

@@ -1,5 +1,6 @@
 """Token model."""
 
+import builtins
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, ClassVar
@@ -122,13 +123,42 @@ class Token(Base):
     def get(cls, session: Session, token_id: int) -> Token | None:
         """
         Get a token by ID.
+
+        Args:
+            session: SQLAlchemy session
+            token_id: Token ID
+
+        Returns:
+            Token or None if not found
+
         """
         return session.get(cls, token_id)
 
     @classmethod
+    def list(cls, session: Session, sentence_id: int) -> builtins.list[Token]:
+        """
+        Get all tokens by sentence ID, ordered by order index.
+
+        Args:
+            session: SQLAlchemy session
+            sentence_id: Sentence ID
+
+        Returns:
+            List of tokens ordered by order index
+
+        """
+        return builtins.list(
+            session.scalars(
+                select(cls)
+                .where(cls.sentence_id == sentence_id)
+                .order_by(cls.order_index)
+            ).all()
+        )
+
+    @classmethod
     def create_from_sentence(
         cls, session, sentence_id: int, sentence_text: str
-    ) -> list[Token]:
+    ) -> builtins.list[Token]:
         """
         Create new tokens for a sentence.
 
@@ -157,10 +187,7 @@ class Token(Base):
             session.add(token)
             session.flush()  # Get the ID
 
-            existing_annotation = session.scalar(
-                select(Annotation).where(Annotation.token_id == token.id)
-            )
-            if not existing_annotation:
+            if not Annotation.exists(session, token.id):
                 annotation = Annotation(token_id=token.id)
                 session.add(annotation)
 
@@ -169,7 +196,7 @@ class Token(Base):
         return tokens
 
     @classmethod
-    def tokenize(cls, sentence_text: str) -> list[str]:
+    def tokenize(cls, sentence_text: str) -> builtins.list[str]:
         """
         Tokenize a sentence.
 
@@ -256,10 +283,7 @@ class Token(Base):
         token_strings = cls.tokenize(sentence_text)
 
         # Get existing tokens ordered by order_index
-        stmt = (
-            select(cls).where(cls.sentence_id == sentence_id).order_by(cls.order_index)
-        )
-        existing_tokens = list(session.scalars(stmt).all())
+        existing_tokens = cls.list(session, sentence_id)
 
         # Phase 1: Match tokens at same position
         # (handles exact matches and position-based surface updates)
@@ -331,10 +355,7 @@ class Token(Base):
                     session.flush()  # Get the ID
 
                     # Create empty annotation for new token
-                    existing_annotation = session.scalar(
-                        select(Annotation).where(Annotation.token_id == new_token.id)
-                    )
-                    if not existing_annotation:
+                    if not Annotation.exists(session, new_token.id):
                         annotation = Annotation(token_id=new_token.id)
                         session.add(annotation)
 

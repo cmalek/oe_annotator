@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from sqlalchemy import select
 
 from oeapp.exc import AlreadyExists
 from oeapp.models.project import Project
@@ -58,11 +57,12 @@ def load_projects_into_table(
     project_table.setSortingEnabled(False)
     project_table.setRowCount(0)
 
-    projects = list(
-        main_window.session.scalars(
-            select(Project).order_by(Project.updated_at.desc())
-        ).all()
-    )
+    projects = Project.list(main_window.session)
+    # Sort projects by updated_at in descending order.  We don't expect there
+    # to be thousands of projects, so this is a simple list sort.  If we
+    # ever need to sort by updated_at in a more efficient way, we can use a
+    # SQLAlchemy query.
+    projects.sort(key=lambda x: x.updated_at, reverse=True)
     if not projects:
         main_window.show_information(
             "No projects found. Create a new project first.",
@@ -741,9 +741,7 @@ class DeleteProjectDialog:
             self.main_window.setWindowTitle("Ænglisc Toolkit")
 
             # Show appropriate dialog based on remaining projects
-            remaining_projects = list(
-                self.main_window.session.scalars(select(Project)).all()
-            )
+            remaining_projects = Project.list(self.main_window.session)
             if not remaining_projects:
                 # No projects remaining, show NewProjectDialog
                 self.dialog.accept()

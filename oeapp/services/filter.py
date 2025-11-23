@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import and_, func, or_
 
 from oeapp.models.annotation import Annotation
+from oeapp.models.project import Project
 from oeapp.models.sentence import Sentence
 from oeapp.models.token import Token
 
@@ -274,12 +275,11 @@ class FilterService:
 
         """
         # Total tokens
-        total_tokens = (
-            self.session.query(func.count(Token.id))
-            .join(Sentence, Token.sentence_id == Sentence.id)
-            .filter(Sentence.project_id == project_id)
-            .scalar()
-        )
+        project = Project.get(self.session, project_id)
+        if project is None:
+            msg = f"Project with ID {project_id} not found"
+            raise ValueError(msg)
+        total_tokens = project.total_token_count(self.session)
 
         # Annotated tokens
         annotated_tokens = (

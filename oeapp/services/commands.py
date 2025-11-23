@@ -4,8 +4,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
-from sqlalchemy import select
-
 from oeapp.models.annotation import Annotation
 from oeapp.models.note import Note
 from oeapp.models.sentence import Sentence
@@ -322,15 +320,9 @@ class MergeSentenceCommand(Command):
 
         # Update display_order for all subsequent sentences
         # Query using stored values since next_sentence is now deleted
-        stmt = (
-            select(Sentence)
-            .where(
-                Sentence.project_id == next_project_id,
-                Sentence.display_order > next_display_order,
-            )
-            .order_by(Sentence.display_order)
+        subsequent_sentences = Sentence.subsequent_sentences(
+            self.session, next_project_id, next_display_order
         )
-        subsequent_sentences = list(self.session.scalars(stmt).all())
         for sentence in subsequent_sentences:
             old_order = sentence.display_order
             sentence.display_order -= 1

@@ -1,4 +1,5 @@
-"""Add modern_english_meaning and root fields
+"""
+Add modern_english_meaning and root fields
 
 Revision ID: a1b2c3d4e5f6
 Revises: 57399ca978ee

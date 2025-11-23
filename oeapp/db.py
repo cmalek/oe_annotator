@@ -1,18 +1,11 @@
 """SQLAlchemy database setup for Old English Annotator."""
 
-import json
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from alembic import command
-from alembic.config import Config
-from alembic.script import ScriptDirectory
-from PySide6.QtCore import QSettings
-from sqlalchemy import Engine, create_engine, event, inspect, text
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
-
-from oeapp import __version__
 
 if TYPE_CHECKING:
     import sqlite3

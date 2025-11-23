@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from sqlalchemy import select
 
 from oeapp.db import SessionLocal
 from oeapp.exc import MigrationFailed
@@ -218,15 +217,12 @@ class MainWindow(QMainWindow):
         - If there are projects, show OpenProjectDialog.
         """
         # Check if there are any projects in the database
-        first_project = self.session.scalar(select(Project).limit(1))
-        has_projects = first_project is not None
-
-        if not has_projects:
-            # No projects exist, show NewProjectDialog
-            NewProjectDialog(self).execute()
-        else:
+        if bool(Project.first(self.session)):
             # Projects exist, show OpenProjectDialog
             OpenProjectDialog(self).execute()
+        else:
+            # No projects exist, show NewProjectDialog
+            NewProjectDialog(self).execute()
 
     def _setup_global_shortcuts(self) -> None:
         """

@@ -1,5 +1,8 @@
 """Sentence model."""
 
+from __future__ import annotations
+
+import builtins
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -62,14 +65,14 @@ class Sentence(Base):
 
     # Relationships
     project: Mapped[Project] = relationship("Project", back_populates="sentences")
-    tokens: Mapped[list[Token]] = relationship(
+    tokens: Mapped[builtins.list[Token]] = relationship(
         "Token",
         back_populates="sentence",
         cascade="all, delete-orphan",
         order_by="Token.order_index",
         lazy="select",  # Load tokens when accessed
     )
-    notes: Mapped[list[Note]] = relationship(
+    notes: Mapped[builtins.list[Note]] = relationship(
         "Note", back_populates="sentence", cascade="all, delete-orphan"
     )
 
@@ -79,6 +82,21 @@ class Sentence(Base):
         Get a sentence by ID.
         """
         return session.get(cls, sentence_id)
+
+    @classmethod
+    def list(cls, session: Session, project_id: int) -> builtins.list[Sentence]:
+        """
+        Check if a sentence exists by project ID and display order.
+        """
+        return builtins.list(
+            session.scalars(
+                select(cls)
+                .where(
+                    cls.project_id == project_id,
+                )
+                .order_by(cls.display_order)
+            ).all()
+        )
 
     @classmethod
     def get_next_sentence(
@@ -143,6 +161,30 @@ class Sentence(Base):
 
         session.commit()
         return sentence
+
+    @classmethod
+    def subsequent_sentences(
+        cls, session: Session, project_id: int, display_order: int
+    ) -> builtins.list[Sentence]:
+        """
+        Get the subsequent sentences by project ID and display order.
+
+        Args:
+            session: SQLAlchemy session
+            project_id: Project ID
+            display_order: Display order
+
+        Returns:
+            List of subsequent sentences
+
+        """
+        return builtins.list(
+            session.scalars(
+                select(cls)
+                .where(cls.project_id == project_id, cls.display_order > display_order)
+                .order_by(cls.display_order)
+            ).all()
+        )
 
     def to_json(self, session: Session) -> dict:
         """

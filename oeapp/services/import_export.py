@@ -4,8 +4,6 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
-
 from oeapp.models.project import Project
 from oeapp.models.sentence import Sentence
 from oeapp.services import MigrationMetadataService, MigrationService
@@ -311,7 +309,7 @@ class ProjectImporter:
         was_renamed = False
 
         while True:
-            existing = self.session.scalar(select(Project).where(Project.name == name))
+            existing = Project.exists(self.session, name)
             if existing is None:
                 break
             name = f"{original_name} ({counter})"

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from PySide6.QtCore import QObject, QSettings
-from sqlalchemy import Engine, create_engine, func, inspect, select, text
+from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -14,8 +14,6 @@ from oeapp import __version__
 from oeapp.db import get_project_db_path
 from oeapp.exc import BackupFailed
 from oeapp.models.project import Project
-from oeapp.models.sentence import Sentence
-from oeapp.models.token import Token
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -154,19 +152,10 @@ class BackupService(QObject):
 
         # Get projects with token counts
         projects_data = []
-        projects = list(session.scalars(select(Project)).all())
+        projects = Project.list(session)
         for project in projects:
             # Count tokens for this project through sentences
-            total_tokens = (
-                session.scalar(
-                    select(func.count(Token.id))
-                    .select_from(Token)
-                    .join(Sentence)
-                    .where(Sentence.project_id == project.id)
-                )
-                or 0
-            )
-
+            total_tokens = project.total_token_count(session)
             projects_data.append(
                 {
                     "id": project.id,

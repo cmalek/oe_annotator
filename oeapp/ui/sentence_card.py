@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from sqlalchemy import select
 
 from oeapp.models.annotation import Annotation
 from oeapp.models.sentence import Sentence

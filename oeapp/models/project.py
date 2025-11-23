@@ -1,14 +1,16 @@
 """Project model."""
 
+import builtins
 import re
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, select
+from sqlalchemy import DateTime, Integer, String, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from oeapp.db import Base
 from oeapp.exc import AlreadyExists
 from oeapp.models.sentence import Sentence
+from oeapp.models.token import Token
 from oeapp.utils import from_utc_iso, to_utc_iso
 
 
@@ -33,7 +35,7 @@ class Project(Base):
     )
 
     # Relationships
-    sentences: Mapped[list[Sentence]] = relationship(
+    sentences: Mapped[builtins.list[Sentence]] = relationship(
         "Sentence",
         back_populates="project",
         cascade="all, delete-orphan",
@@ -41,11 +43,39 @@ class Project(Base):
     )
 
     @classmethod
+    def exists(cls, session: Session, name: str) -> bool:
+        """
+        Get all projects.
+        """
+        return session.scalar(select(cls).where(cls.name == name)) is not None
+
+    @classmethod
     def get(cls, session: Session, project_id: int) -> Project | None:
         """
         Get a project by name.
         """
         return session.get(cls, project_id)
+
+    @classmethod
+    def first(cls, session: Session) -> Project | None:
+        """
+        Get the first project.
+
+        Args:
+            session: SQLAlchemy session
+
+        Returns:
+            The first project or None if there are no projects
+
+        """
+        return session.scalar(select(cls).order_by(cls.id).limit(1))
+
+    @classmethod
+    def list(cls, session: Session) -> builtins.list[Project]:
+        """
+        Get all projects.
+        """
+        return builtins.list(session.scalars(select(cls)).all())
 
     @classmethod
     def create(
@@ -67,8 +97,7 @@ class Project(Base):
         """
         # Check if project with this name already exists
 
-        existing = session.scalar(select(cls).where(cls.name == name))
-        if existing:
+        if cls.exists(session, name):
             raise AlreadyExists("Project", name)  # noqa: EM101
 
         # Create project
@@ -131,7 +160,7 @@ class Project(Base):
         return project
 
     @classmethod
-    def split_sentences(cls, text: str) -> list[str]:  # noqa: PLR0912
+    def split_sentences(cls, text: str) -> builtins.list[str]:  # noqa: PLR0912, PLR0915
         """
         Split text into sentences.
 
@@ -271,3 +300,24 @@ class Project(Base):
         result = [s for s in result if not re.match(r"^\[\d+\]\s*$", s.strip())]
         # Filter out empty strings and strip leading/trailing whitespace
         return [s.strip() for s in result if s.strip()]
+
+    def total_token_count(self, session: Session) -> int:
+        """
+        Get the total number of tokens in the project.
+
+        Args:
+            session: SQLAlchemy session
+
+        Returns:
+            Total number of tokens in the project
+
+        """
+        return (
+            session.scalar(
+                select(func.count(Token.id))
+                .select_from(Token)
+                .join(Sentence)
+                .where(Sentence.project_id == self.id)
+            )
+            or 0
+        )
