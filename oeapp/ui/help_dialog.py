@@ -63,6 +63,8 @@ class HelpDialog(QDialog):
 
     def __init__(self, topic: str | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        # Make the dialog non-modal so users can keep it open while working
+        self.setModal(False)
         #: The directory containing the help files.
         self.help_dir = get_resource_path("help")
         # Set up the UI.
@@ -106,7 +108,7 @@ class HelpDialog(QDialog):
 
         # Splitter for topic list and content
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        layout.addWidget(splitter)
+        layout.addWidget(splitter, 1)  # Stretch factor of 1 makes it expand to fill space
 
         # Topic list (left sidebar)
         self.topic_list = QListWidget()

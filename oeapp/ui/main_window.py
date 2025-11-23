@@ -562,7 +562,7 @@ class MainWindow(QMainWindow):
 
         """
         dialog = HelpDialog(topic=topic, parent=self)
-        dialog.exec()
+        dialog.show()
 
     def show_filter_dialog(self) -> None:
         """
