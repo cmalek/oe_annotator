@@ -451,7 +451,9 @@ class SentenceCard(QWidget):
             if self.selected_token_index == token_index:
                 # Schedule deselection with a delay to allow double-click to cancel it
                 self._pending_deselect_token_index = token_index
-                self._deselect_timer.start(300)  # 300ms delay, typical double-click timeout
+                self._deselect_timer.start(
+                    300
+                )  # 300ms delay, typical double-click timeout
             else:
                 # Select the token and emit signal for sidebar
                 self.selected_token_index = token_index
@@ -1128,7 +1130,8 @@ class SentenceCard(QWidget):
         Perform deselection if still pending. Called by timer after delay.
         """
         if self._pending_deselect_token_index is not None:
-            # Only deselect if the token index still matches (user didn't select different token)
+            # Only deselect if the token index still matches (user didn't select
+            # different token)
             if self.selected_token_index == self._pending_deselect_token_index:
                 self.selected_token_index = None
                 self._clear_highlight()

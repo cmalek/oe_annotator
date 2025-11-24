@@ -3,9 +3,15 @@
 from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeyEvent, QKeySequence, QShortcut  # Needed at runtime
+from PySide6.QtGui import (
+    QKeyEvent,
+    QKeySequence,
+    QShortcut,
+    QShowEvent,
+)  # Needed at runtime
 from PySide6.QtWidgets import (
     QHeaderView,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -98,7 +104,6 @@ class TokenTable(QWidget):
         self.tokens: list[Token] = []
         #: The annotations to display.
         self.annotations: dict[int, Annotation] = {}  # token_id -> Annotation
-        # Set up the UI.
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -146,15 +151,21 @@ class TokenTable(QWidget):
         )
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setMaximumHeight(200)
         self.table.itemDoubleClicked.connect(self._on_item_double_clicked)
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
+        self.table.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self.table.setMinimumHeight(150)
+        self.table.updateGeometry()
         # Add QShortcut for "A" key on the table widget with WidgetShortcut context
         # This should take precedence over incremental search
         annotate_shortcut = QShortcut(QKeySequence("A"), self.table)
         annotate_shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
         annotate_shortcut.activated.connect(self._on_annotation_key_pressed)
         layout.addWidget(self.table)
+        index = layout.indexOf(self.table)
+        layout.setStretch(index, 1)  # give table vertical priority
 
     @property
     def has_focus(self) -> bool:
@@ -162,12 +173,6 @@ class TokenTable(QWidget):
         Check if the token table has focus.
         """
         return self.table.hasFocus()
-
-    def focus(self) -> None:
-        """
-        Focus the token table.
-        """
-        self.table.setFocus()
 
     @property
     def current_row(self) -> int:
@@ -178,6 +183,26 @@ class TokenTable(QWidget):
         if current_row == -1:
             return 1
         return current_row
+
+    def focus(self) -> None:
+        """
+        Focus the token table.
+        """
+        self.table.setFocus()
+
+    def setVisible(self, visible: bool) -> None:  # noqa: FBT001, N802
+        """
+        Set the visibility of the token table.
+
+        Args:
+            visible: Whether to show the token table
+
+        """
+        super().setVisible(visible)
+        self.table.setVisible(visible)
+        if visible:
+            self.table.setUpdatesEnabled(True)
+            self.table.viewport().update()  # optional, to force a repaint
 
     def _on_item_double_clicked(self, item: QTableWidgetItem) -> None:
         """
@@ -206,7 +231,7 @@ class TokenTable(QWidget):
 
         """
         # Get the current row of the table.
-        row = self.table.currentRow()
+        row = self.current_row
         if 0 <= row < len(self.tokens):
             token = self.tokens[row]
             self.token_selected.emit(token)
@@ -235,11 +260,6 @@ class TokenTable(QWidget):
         """
         # Set the tokens to display.
         self.tokens = tokens
-        # Set the annotations to display.
-        self.annotations = {
-            cast("int", token.id): cast("Annotation", token.annotation)
-            for token in tokens
-        }
         # Set the number of rows to the number of tokens.
         self.table.setRowCount(len(tokens))
         # Loop through the tokens and add them to the table.
@@ -248,7 +268,7 @@ class TokenTable(QWidget):
             # Word
             self.table.setItem(row, 0, QTableWidgetItem(token.surface))
             # Get annotation for this token
-            annotation = self.annotations.get(cast("int", token.id))
+            annotation = token.annotation
             if annotation:
                 # POS
                 self.table.setItem(row, 1, QTableWidgetItem(annotation.pos or "—"))
@@ -350,7 +370,7 @@ class TokenTable(QWidget):
             Selected :class:`~oeapp.models.token.Token` object or ``None``
 
         """
-        row = self.table.currentRow()
+        row = self.current_row
         if 0 <= row < len(self.tokens):
             return self.tokens[row]
         return None
@@ -372,3 +392,29 @@ class TokenTable(QWidget):
             item = self.table.item(token_index, 0)
             if item:
                 self.table.scrollToItem(item)
+
+    def refresh(self) -> None:
+        """
+        Refresh the table display from stored tokens.
+
+        This repopulates the table with the tokens currently stored in self.tokens.
+        Useful when the widget is shown again after being hidden.
+        """
+        if self.tokens:
+            self.set_tokens(self.tokens)
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        """
+        Handle show event to refresh table when widget becomes visible.
+
+        Args:
+            event: Show event
+
+        """
+        super().showEvent(event)
+        # Always refresh table when shown if we have stored tokens
+        # This handles cases where Qt clears the table when hidden
+        # Check if table is empty or if we have tokens to refresh
+        if self.tokens and (self.table.rowCount() == 0 or not self.table.item(0, 0)):
+            # Table is empty or first item is missing - refresh it
+            self.refresh()
