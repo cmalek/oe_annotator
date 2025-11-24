@@ -15,13 +15,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from oeapp.db import Base
+from oeapp.mixins import AnnotationTextualMixin
 from oeapp.utils import from_utc_iso, to_utc_iso
 
 if TYPE_CHECKING:
     from oeapp.models.token import Token
 
 
-class Annotation(Base):
+class Annotation(AnnotationTextualMixin, Base):
     """Represents grammatical/morphological annotations for a token."""
 
     __tablename__ = "annotations"

@@ -1,6 +1,6 @@
 """Token details sidebar widget."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
@@ -84,17 +84,30 @@ class TokenDetailsSidebar(AnnotationLookupsMixin, QWidget):
         self._current_sentence = sentence
         self._clear_content()
 
+        annotation = cast("Annotation", token.annotation)
+        pos_str = ""
+        gender_str = ""
+        context_str = ""
+        if annotation is not None:
+            pos_str = annotation.format_pos(annotation)
+            gender_str = annotation.format_gender(annotation)
+            context_str = annotation.format_context(annotation)
+
         # Header: [sentence number] token surface
-        header_text = f"[{sentence.display_order}] {token.surface}"
+        header_text = f"[{sentence.display_order}] "
+        if pos_str:
+            header_text += f"<sup style='color: #666;'>{pos_str}</sup>"
+        if gender_str:
+            header_text += f"<sub style='color: #666;'>{gender_str}</sub>"
+        header_text += f"{token.surface}"
+        if context_str:
+            header_text += f"<sub style='color: #666;'>{context_str}</sub>"
         header_label = QLabel(header_text)
         header_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         header_label.setWordWrap(True)
         self.content_layout.addWidget(header_label)
 
         self.content_layout.addSpacing(10)
-
-        # Get annotation if it exists
-        annotation = token.annotation
 
         if not annotation or not annotation.pos:
             # No annotation or POS set

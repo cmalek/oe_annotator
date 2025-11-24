@@ -1,10 +1,11 @@
 """DOCX export service for Old English Annotator."""
 
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING
 
 from docx import Document
 from docx.shared import Pt
 
+from oeapp.mixins import AnnotationTextualMixin
 from oeapp.models.project import Project
 from oeapp.models.token import Token
 
@@ -18,57 +19,14 @@ if TYPE_CHECKING:
     from oeapp.models.sentence import Sentence
 
 
-class DOCXExporter:
+class DOCXExporter(AnnotationTextualMixin):
     """
     Exports annotated Old English text to DOCX format.
 
     Args:
-        db: Database connection
+        session: SQLAlchemy session
 
     """
-
-    #: A lookup map for number codes to their long form.
-    CASE_MAP: Final[dict[str, str]] = {
-        "n": "nom",
-        "a": "acc",
-        "g": "gen",
-        "d": "dat",
-        "i": "inst",
-    }
-    #: A lookup map for compact case codes to their short form.
-    COMPACT_CASE_MAP: Final[dict[str, str]] = {
-        "n": "n",
-        "a": "a",
-        "g": "g",
-        "d": "d",
-        "i": "i",
-    }
-    #: A lookup map for number codes to their short form.
-    NUMBER_MAP: Final[dict[str, str]] = {
-        "s": "1",
-        "p": "pl",
-    }
-    #: A lookup map for part of speech codes to their short form.
-    PART_OF_SPEECH_MAP: Final[dict[str, str]] = {
-        "N": "n:",
-        "V": "v:",
-        "A": "adj:",
-        "R": "pron:",
-    }
-    #: Pronoun type map.
-    PRONOUN_TYPE_MAP: Final[dict[str, str]] = {
-        "p": "pers",
-        "r": "rel",
-        "d": "dem",
-        "i": "int",
-    }
-    #: Article type map.
-    ARTICLE_TYPE_MAP: Final[dict[str, str]] = {
-        "d": "def",
-        "i": "ind",
-        "p": "poss",
-        "D": "dem",
-    }
 
     def __init__(self, session: Session) -> None:
         """
@@ -190,14 +148,14 @@ class DOCXExporter:
 
                 # Add case/number/gender compact format
                 if annotation.case and annotation.number:
-                    case_str = self.COMPACT_CASE_MAP.get(annotation.case, "")
+                    case_str = self.CASE_MAP.get(annotation.case, "")
                     number_str = self.NUMBER_MAP.get(annotation.number, "")
                     if case_str and number_str:
                         compact = f"{case_str}{number_str}"
                         superscript_parts.append(compact)
                 elif annotation.case:
                     superscript_parts.append(
-                        self.COMPACT_CASE_MAP.get(annotation.case, annotation.case)
+                        self.CASE_MAP.get(annotation.case, annotation.case)
                     )
                 elif annotation.number:
                     superscript_parts.append(
