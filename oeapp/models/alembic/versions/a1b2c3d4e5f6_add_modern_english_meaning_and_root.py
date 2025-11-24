@@ -27,7 +27,9 @@ def upgrade() -> None:
     Upgrade schema.
     """
     with op.batch_alter_table("annotations", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("modern_english_meaning", sa.String(), nullable=True))
+        batch_op.add_column(
+            sa.Column("modern_english_meaning", sa.String(), nullable=True)
+        )
         batch_op.add_column(sa.Column("root", sa.String(), nullable=True))
 
 
@@ -38,4 +40,3 @@ def downgrade() -> None:
     with op.batch_alter_table("annotations", schema=None) as batch_op:
         batch_op.drop_column("root")
         batch_op.drop_column("modern_english_meaning")
-

@@ -82,6 +82,12 @@ def upgrade() -> None:  # noqa: PLR0915
             existing_nullable=True,
         )
         batch_op.alter_column(
+            "verb_person",
+            existing_type=sa.TEXT(),
+            type_=sa.String(),
+            existing_nullable=True,
+        )
+        batch_op.alter_column(
             "verb_mood",
             existing_type=sa.TEXT(),
             type_=sa.String(),
@@ -109,7 +115,7 @@ def upgrade() -> None:  # noqa: PLR0915
             "uncertain",
             existing_type=sa.BOOLEAN(),
             nullable=False,
-            existing_server_default=sa.text("0")
+            existing_server_default=sa.text("0"),
         )
         batch_op.alter_column(
             "alternatives_json",

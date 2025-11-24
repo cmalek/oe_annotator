@@ -393,6 +393,15 @@ class MigrationService(ProjectFoldersMixin):
         """
         return self.extract_revision_id(migration_file)
 
+    def latest_migration_version(self) -> str | None:
+        """
+        Get the latest migration version from Alembic.
+        """
+        filename = self.newest_migration_file()
+        if filename is None:
+            return None
+        return self.extract_revision_id(filename)
+
     def db_migration_version(self) -> str | None:
         """
         Get the current database migration version from Alembic.
@@ -606,7 +615,7 @@ class MigrationService(ProjectFoldersMixin):
             # Fresh database - create tables from models
             Base.metadata.create_all(self.engine)
             # Create alembic_version table and mark initial migration as applied
-            initial_version = "57399ca978ee"
+            initial_version = self.latest_migration_version()
             with self.engine.connect() as conn:
                 conn.execute(
                     text(
@@ -620,7 +629,7 @@ class MigrationService(ProjectFoldersMixin):
                 conn.commit()
             return MigrationResult(
                 app_version=__version__,
-                migration_version=initial_version,
+                migration_version=cast("str", initial_version),
             )
         # Existing database - apply migrations normally
         command.upgrade(self.config, "head")
