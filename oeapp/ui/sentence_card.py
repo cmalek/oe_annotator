@@ -32,6 +32,7 @@ from oeapp.services.commands import (
 )
 from oeapp.ui.annotation_modal import AnnotationModal
 from oeapp.ui.case_filter_dialog import CaseFilterDialog
+from oeapp.ui.pos_filter_dialog import POSFilterDialog
 from oeapp.ui.token_table import TokenTable
 
 if TYPE_CHECKING:
@@ -133,8 +134,12 @@ class SentenceCard(QWidget):
         self._current_highlight_mode: str | None = None
         # Track selected cases for highlighting (default: all cases)
         self._selected_cases: set[str] = {"n", "a", "g", "d", "i"}
+        # Track selected POS tags for highlighting (default: all POS tags)
+        self._selected_pos: set[str] = {"N", "V", "A", "R", "D", "B", "C", "E", "I"}
         # Case filter dialog reference
         self._case_filter_dialog: CaseFilterDialog | None = None
+        # POS filter dialog reference
+        self._pos_filter_dialog: POSFilterDialog | None = None
         # Track selected token index for details sidebar
         self.selected_token_index: int | None = None
         # Timer to delay deselection to allow double-click to cancel it
@@ -679,10 +684,23 @@ class SentenceCard(QWidget):
             self.case_toggle_button.setChecked(False)
             self.number_toggle_button.setChecked(False)
             self._current_highlight_mode = "pos"
+            # Create or show the POS filter dialog
+            if self._pos_filter_dialog is None:
+                self._pos_filter_dialog = POSFilterDialog(self)
+                self._pos_filter_dialog.pos_changed.connect(self._on_pos_changed)
+                self._pos_filter_dialog.dialog_closed.connect(
+                    self._on_pos_dialog_closed
+                )
+                # Set initial selected POS tags
+                self._pos_filter_dialog.set_selected_pos(self._selected_pos)
+            self._pos_filter_dialog.show()
             self._apply_pos_highlighting()
         else:
             self._current_highlight_mode = None
             self._clear_all_highlights()
+            # Hide the dialog when unchecking
+            if self._pos_filter_dialog is not None:
+                self._pos_filter_dialog.hide()
 
     def _on_case_toggle(self, checked: bool) -> None:  # noqa: FBT001
         """Handle case highlighting toggle."""
@@ -731,6 +749,30 @@ class SentenceCard(QWidget):
         self._current_highlight_mode = None
         self._clear_all_highlights()
 
+    def _on_pos_changed(self, selected_pos: set[str]) -> None:
+        """
+        Handle POS selection changes from the dialog.
+
+        Args:
+            selected_pos: Set of selected POS codes
+
+        """
+        self._selected_pos = selected_pos
+        # Re-apply highlighting if POS highlighting is active
+        if self._current_highlight_mode == "pos":
+            self._apply_pos_highlighting()
+
+    def _on_pos_dialog_closed(self) -> None:
+        """Handle POS dialog close event by unchecking the toggle button."""
+        # Uncheck the POS toggle button and clear highlights
+        # Block signals temporarily to avoid triggering clicked signal
+        self.pos_toggle_button.blockSignals(True)  # noqa: FBT003
+        self.pos_toggle_button.setChecked(False)
+        self.pos_toggle_button.blockSignals(False)  # noqa: FBT003
+        # Clear highlights and reset mode (dialog is already closing, so don't hide it)
+        self._current_highlight_mode = None
+        self._clear_all_highlights()
+
     def _on_number_toggle(self, checked: bool) -> None:  # noqa: FBT001
         """Handle number highlighting toggle."""
         if checked:
@@ -744,7 +786,11 @@ class SentenceCard(QWidget):
             self._clear_all_highlights()
 
     def _apply_pos_highlighting(self) -> None:
-        """Apply colors based on parts of speech."""
+        """
+        Apply colors based on parts of speech.
+
+        Only highlights POS tags that are in the :attr:`_selected_pos` set.
+        """
         self._clear_all_highlights()
         text = self.oe_text_edit.toPlainText()
         if not text or not self.tokens:
@@ -759,11 +805,13 @@ class SentenceCard(QWidget):
                 continue
 
             pos = annotation.pos
-            color = self.POS_COLORS.get(pos, self.POS_COLORS[None])
-            if color != self.POS_COLORS[None]:  # Only highlight if not default
-                selection = self._create_token_selection(token, text, color)
-                if selection:
-                    extra_selections.append(selection)
+            # Only highlight if POS is in selected POS tags
+            if pos in self._selected_pos:
+                color = self.POS_COLORS.get(pos, self.POS_COLORS[None])
+                if color != self.POS_COLORS[None]:  # Only highlight if not default
+                    selection = self._create_token_selection(token, text, color)
+                    if selection:
+                        extra_selections.append(selection)
 
         self.oe_text_edit.setExtraSelections(extra_selections)
 
