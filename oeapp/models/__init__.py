@@ -1,4 +1,4 @@
-"""Data models for Old English Annotator."""
+"""Data models for Ænglisc Toolkit."""
 
 from oeapp.models.annotation import Annotation
 from oeapp.models.note import Note

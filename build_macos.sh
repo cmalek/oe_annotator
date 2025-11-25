@@ -3,7 +3,7 @@
 
 set -e
 
-echo "Building Old English Annotator for macOS..."
+echo "Building Ænglisc Toolkit for macOS..."
 
 # Check if virtual environment is activated
 if [ -z "$VIRTUAL_ENV" ]; then
@@ -32,7 +32,7 @@ if [ -d "dist/oe_annotator.app" ]; then
     echo ""
     echo "To create a DMG, install create-dmg:"
     echo "  brew install create-dmg"
-    echo "  create-dmg --volname 'Old English Annotator' dist/oe_annotator.dmg dist/"
+    echo "  create-dmg --volname 'Ænglisc Toolkit' dist/oe_annotator.dmg dist/"
 else
     echo "Build failed - oe_annotator.app not found"
     exit 1

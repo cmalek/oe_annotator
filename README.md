@@ -1,4 +1,4 @@
-# Old English Annotator
+# Ænglisc Toolkit
 
 A desktop application to assist in translation from Old English/Anglo Saxon to Modern English.
 

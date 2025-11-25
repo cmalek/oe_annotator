@@ -1,6 +1,6 @@
 # Packaging Guide
 
-This guide explains how to package the Old English Annotator application for distribution.
+This guide explains how to package the Ænglisc Toolkit application for distribution.
 
 ## Prerequisites
 
@@ -31,7 +31,7 @@ To create a distributable DMG file:
 brew install create-dmg
 
 # Create DMG
-create-dmg --volname "Old English Annotator" \
+create-dmg --volname "Ænglisc Toolkit" \
            --window-pos 200 120 \
            --window-size 800 400 \
            --icon-size 100 \

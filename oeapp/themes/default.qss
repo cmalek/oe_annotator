@@ -1,7 +1,7 @@
 """Default theme stylesheet."""
 
 DEFAULT_STYLE = """
-/* Old English Annotator Default Theme */
+/* Ænglisc Toolkit Default Theme */
 QMainWindow {
     background-color: #f5f5f5;
 }

@@ -1,1 +1,1 @@
-"""Unit tests for Old English Annotator."""
+"""Unit tests for Ænglisc Toolkit."""

@@ -1,4 +1,4 @@
-"""Old English Annotator application package."""
+"""Ænglisc Toolkit application package."""
 
 from typing import Final
 

@@ -1,4 +1,4 @@
-"""SQLAlchemy database setup for Old English Annotator."""
+"""SQLAlchemy database setup for Ænglisc Toolkit."""
 
 import sys
 from pathlib import Path

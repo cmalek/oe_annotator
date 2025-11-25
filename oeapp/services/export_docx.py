@@ -1,4 +1,4 @@
-"""DOCX export service for Old English Annotator."""
+"""DOCX export service for Ænglisc Toolkit."""
 
 from typing import TYPE_CHECKING
 

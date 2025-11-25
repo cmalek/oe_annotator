@@ -1,4 +1,4 @@
-"""Project import/export service for Old English Annotator."""
+"""Project import/export service for Ænglisc Toolkit."""
 
 import json
 from pathlib import Path

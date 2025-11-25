@@ -1,7 +1,7 @@
 @echo off
 REM Build script for Windows
 
-echo Building Old English Annotator for Windows...
+echo Building Ænglisc Toolkit for Windows...
 
 REM Check if virtual environment is activated
 if "%VIRTUAL_ENV%"=="" (

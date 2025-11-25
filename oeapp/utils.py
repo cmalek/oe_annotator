@@ -1,4 +1,4 @@
-"""Utility functions for Old English Annotator."""
+"""Utility functions for Ænglisc Toolkit."""
 
 import sys
 from datetime import UTC, datetime
