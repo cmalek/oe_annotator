@@ -1,13 +1,21 @@
 import sys
 
 from PySide6.QtCore import QCoreApplication, QTimer
-from PySide6.QtGui import QGuiApplication, QIcon
+from PySide6.QtGui import QFontDatabase, QGuiApplication, QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from oeapp import __version__
 from oeapp.utils import get_resource_path
 
 from .main_window import MainWindow
+
+
+FONTS = [
+    "assets/Maranatha.ttf",
+    "assets/Anvers-Bold.ttf",
+    "assets/Anvers-Regular.ttf",
+    "assets/Anvers-SemiBold.ttf",
+]
 
 
 def create_application() -> QApplication:
@@ -44,6 +52,19 @@ def create_application() -> QApplication:
     logo_path = get_resource_path("assets/logo.png")
     if logo_path.exists():
         app.setWindowIcon(QIcon(str(logo_path)))
+
+    # Load Maranatha font
+    for font in FONTS:
+        font_path = get_resource_path(font)
+        if font_path.exists():
+            font_id = QFontDatabase.addApplicationFont(str(font_path))
+            if font_id != -1:
+                # Font loaded successfully
+                # Query the font families to get the exact name
+                families = QFontDatabase.applicationFontFamilies(font_id)
+                # The font should be available now, even if we don't store the exact name
+                # Qt will match "Maranatha" to the loaded font family
+                print(f"Fonts loaded: {families}")
 
     window = MainWindow()
     window.show()

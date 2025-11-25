@@ -212,7 +212,7 @@ class SentenceCard(QWidget):
         # Old English text line (editable) with toggle buttons
         oe_label_layout = QHBoxLayout()
         oe_label = QLabel("Old English:")
-        oe_label.setFont(QFont("Arial", 14))
+        oe_label.setFont(QFont("Anvers", 18))
         oe_label_layout.addWidget(oe_label)
         oe_label_layout.addStretch()
 
@@ -236,7 +236,7 @@ class SentenceCard(QWidget):
 
         self.oe_text_edit = ClickableTextEdit()
         self.oe_text_edit.setText(self.sentence.text_oe)
-        self.oe_text_edit.setFont(QFont("Times New Roman", 18))
+        self.oe_text_edit.setFont(QFont("Anvers", 18))
         self.oe_text_edit.setPlaceholderText("Enter Old English text...")
         self.oe_text_edit.textChanged.connect(self._on_oe_text_changed)
         self.oe_text_edit.clicked.connect(self._on_oe_text_clicked)
@@ -253,7 +253,7 @@ class SentenceCard(QWidget):
         # Modern English translation with toggle button
         translation_label_layout = QHBoxLayout()
         translation_label = QLabel("Modern English Translation:")
-        translation_label.setFont(QFont("Arial", 18))
+        translation_label.setFont(QFont("Helvetica", 16))
         translation_label_layout.addWidget(translation_label)
         translation_label_layout.addStretch()
 
@@ -266,6 +266,7 @@ class SentenceCard(QWidget):
 
         self.translation_edit = QTextEdit()
         self.translation_edit.setPlainText(self.sentence.text_modern or "")
+        self.translation_edit.setFont(QFont("Helvetica", 16))
         self.translation_edit.setPlaceholderText("Enter Modern English translation...")
         self.translation_edit.setMaximumHeight(100)
         self.translation_edit.textChanged.connect(self._on_translation_changed)
@@ -273,7 +274,7 @@ class SentenceCard(QWidget):
 
         # Notes section placeholder
         notes_label = QLabel("Notes:")
-        notes_label.setFont(QFont("Arial", 10))
+        notes_label.setFont(QFont("Helvetica", 10))
         layout.addWidget(notes_label)
 
         self.notes_label = QLabel("(No notes yet)")
