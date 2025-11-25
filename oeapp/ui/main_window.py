@@ -443,10 +443,14 @@ class MainWindow(QMainWindow):
         dialog.execute()
 
     def export_project_json(
-        self, project_id: int | None = None, parent: QWidget | None = None
+        self,
+        project_id: int | bool | None = None,  # noqa: FBT001
+        parent: QWidget | None = None,
     ) -> bool:
         """
         Export project to JSON format.
+
+        Note that when called as a callback from a dialog, project_id will be a boolean.
 
         Args:
             project_id: Optional project ID to export. If not provided, uses
@@ -459,10 +463,7 @@ class MainWindow(QMainWindow):
 
         """
         # Use provided project_id or fall back to current_project_id
-        target_project_id = (
-            project_id if project_id is not None else self.current_project_id
-        )
-
+        target_project_id = project_id if project_id else self.current_project_id
         if not self.session or not target_project_id:
             self.show_warning("No project open")
             return False
