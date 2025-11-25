@@ -39,6 +39,9 @@ class Annotation(AnnotationTextualMixin, Base):
             "pronoun_type IN ('p','r','d','i')", name="ck_annotations_pronoun_type"
         ),
         CheckConstraint(
+            "pronoun_number IN ('s','d','pl')", name="ck_annotations_pronoun_number"
+        ),
+        CheckConstraint(
             "article_type IN ('d','i','p','D')", name="ck_annotations_article_type"
         ),
         CheckConstraint(
@@ -101,6 +104,10 @@ class Annotation(AnnotationTextualMixin, Base):
     pronoun_type: Mapped[str | None] = mapped_column(
         String, nullable=True
     )  # p, r, d, i
+    #: The pronoun number.
+    pronoun_number: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # 1, 2, pl
     #: The verb class.
     verb_class: Mapped[str | None] = mapped_column(String, nullable=True)
     #: The verb tense.
@@ -179,6 +186,7 @@ class Annotation(AnnotationTextualMixin, Base):
             "declension": self.declension,
             "article_type": self.article_type,
             "pronoun_type": self.pronoun_type,
+            "pronoun_number": self.pronoun_number,
             "verb_class": self.verb_class,
             "verb_tense": self.verb_tense,
             "verb_person": self.verb_person,
@@ -222,6 +230,7 @@ class Annotation(AnnotationTextualMixin, Base):
             declension=ann_data.get("declension"),
             article_type=ann_data.get("article_type"),
             pronoun_type=ann_data.get("pronoun_type"),
+            pronoun_number=ann_data.get("pronoun_number"),
             verb_class=ann_data.get("verb_class"),
             verb_tense=ann_data.get("verb_tense"),
             verb_person=ann_data.get("verb_person"),

@@ -87,6 +87,13 @@ class AnnotationTextualMixin:
         "i": "int",
     }
 
+    #: Pronoun number map.
+    PRONOUN_NUMBER_MAP: Final[dict[str, str]] = {
+        "s": "1",
+        "d": "D",
+        "pl": "pl",
+    }
+
     # ===============================
     # Verbs
     # ===============================
@@ -312,9 +319,15 @@ class AnnotationTextualMixin:
             if not annotation.case:
                 return context_str
             context_str += self.CASE_MAP[annotation.case]
-            if not annotation.number:
-                return context_str
-            context_str += self.NUMBER_MAP[annotation.number]
+            if annotation.pos == "R":
+                print(f"annotation.pronoun_number: {annotation.pronoun_number}")
+                if not annotation.pronoun_number:
+                    return context_str
+                context_str += self.PRONOUN_NUMBER_MAP[annotation.pronoun_number]
+            else:
+                if not annotation.number:
+                    return context_str
+                context_str += self.NUMBER_MAP[annotation.number]
         elif annotation.pos == "V":
             if annotation.verb_form == "part":
                 # If it's a participle, just return the form, and the tense

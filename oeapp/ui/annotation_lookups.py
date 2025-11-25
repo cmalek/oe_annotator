@@ -207,6 +207,20 @@ class AnnotationLookupsMixin:
         i: k for i, k in enumerate(PRONOUN_TYPE_MAP.keys()) if k is not None
     }
 
+    #: A lookup map for pronoun number codes to their long form.
+    PRONOUN_NUMBER_MAP: Final[dict[str | None, str]] = {
+        None: "",
+        "s": "Singular (s)",
+        "d": "Dual (d)",
+        "pl": "Plural (pl)",
+    }
+    #: A Reverse lookup map for pronoun number long form to code.  The key
+    #: is the index of the long form in the PRONOUN_NUMBER_MAP, and the value
+    #: is the code.
+    PRONOUN_NUMBER_REVERSE_MAP: Final[dict[int, str]] = {
+        i: k for i, k in enumerate(PRONOUN_NUMBER_MAP.keys()) if k is not None
+    }
+
     #: A lookup map for adjective degree codes to their long form.
     ADJECTIVE_DEGREE_MAP: Final[dict[str | None, str]] = {
         None: "",

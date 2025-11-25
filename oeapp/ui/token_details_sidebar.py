@@ -94,16 +94,17 @@ class TokenDetailsSidebar(AnnotationLookupsMixin, QWidget):
             context_str = annotation.format_context(annotation)
 
         # Header: [sentence number] token surface
+        style = "color: #666; font-family: Helvetica; font-weight: normal;"
         header_text = f"[{sentence.display_order}] "
         if pos_str:
-            header_text += f"<sup style='color: #666;'>{pos_str}</sup>"
+            header_text += f"<sup style='{style}'>{pos_str}</sup>"
         if gender_str:
-            header_text += f"<sub style='color: #666;'>{gender_str}</sub>"
+            header_text += f"<sub style='{style}'>{gender_str}</sub>"
         header_text += f"{token.surface}"
         if context_str:
-            header_text += f"<sub style='color: #666;'>{context_str}</sub>"
+            header_text += f"<sub style='{style}'>{context_str}</sub>"
         header_label = QLabel(header_text)
-        header_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        header_label.setFont(QFont("Anvers", 18, QFont.Weight.Bold))
         header_label.setWordWrap(True)
         self.content_layout.addWidget(header_label)
 
@@ -120,7 +121,7 @@ class TokenDetailsSidebar(AnnotationLookupsMixin, QWidget):
         pos_text = self.PART_OF_SPEECH_MAP.get(annotation.pos, "Unknown")
         if pos_text:
             pos_label = QLabel(f"Part of Speech: {pos_text}")
-            pos_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+            pos_label.setFont(QFont("Helvetica", 12, QFont.Weight.Bold))
             self.content_layout.addWidget(pos_label)
             self.content_layout.addSpacing(5)
 
@@ -147,7 +148,9 @@ class TokenDetailsSidebar(AnnotationLookupsMixin, QWidget):
         # Common fields for all POS
         self.content_layout.addSpacing(10)
         separator = QLabel("─" * 30)
-        separator.setStyleSheet("color: #ccc;")
+        separator.setStyleSheet(
+            "color: #ccc; font-family: Helvetica; font-weight: normal;"
+        )
         self.content_layout.addWidget(separator)
         self.content_layout.addSpacing(10)
 
@@ -176,6 +179,7 @@ class TokenDetailsSidebar(AnnotationLookupsMixin, QWidget):
             else "?"
         )
         mod_e_label = QLabel(f"Modern English Meaning: {mod_e_value}")
+        mod_e_label.setFont(QFont("Helvetica", 12, QFont.Weight.Bold))
         self._format_field_label(mod_e_label, annotation.modern_english_meaning)
         self.content_layout.addWidget(mod_e_label)
 
@@ -220,7 +224,9 @@ class TokenDetailsSidebar(AnnotationLookupsMixin, QWidget):
         if value is None or value == "" or value is False:
             label.setStyleSheet("color: #999; font-style: italic;")
         else:
-            label.setStyleSheet("color: #000;")
+            label.setStyleSheet(
+                "color: #000; font-family: Helvetica; font-weight: normal;"
+            )
 
     def _display_noun_fields(self, annotation: Annotation) -> None:
         """
@@ -245,6 +251,7 @@ class TokenDetailsSidebar(AnnotationLookupsMixin, QWidget):
         # Case
         case_value = self.CASE_MAP.get(annotation.case, "?")
         case_label = QLabel(f"Case: {case_value}")
+        case_label.setFont(QFont("Helvetica", 12, QFont.Weight.Bold))
         self._format_field_label(case_label, annotation.case)
         self.content_layout.addWidget(case_label)
 
@@ -358,7 +365,7 @@ class TokenDetailsSidebar(AnnotationLookupsMixin, QWidget):
         self.content_layout.addWidget(gender_label)
 
         # Number
-        number_value = self.NUMBER_MAP.get(annotation.number, "?")
+        number_value = self.PRONOUN_NUMBER_MAP.get(annotation.pronoun_number, "?")
         number_label = QLabel(f"Number: {number_value}")
         self._format_field_label(number_label, annotation.number)
         self.content_layout.addWidget(number_label)

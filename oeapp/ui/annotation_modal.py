@@ -590,7 +590,9 @@ class AnnotationModal(AnnotationLookupsMixin, QDialog):
         self.fields_layout.addRow("Gender:", self.pro_gender_combo)
 
         self.pro_number_combo = QComboBox()
-        self.pro_number_combo.addItems(cast("list[str]", self.NUMBER_MAP.values()))
+        self.pro_number_combo.addItems(
+            cast("list[str]", self.PRONOUN_NUMBER_MAP.values())
+        )
         self.fields_layout.addRow("Number:", self.pro_number_combo)
 
         self.pro_case_combo = QComboBox()
@@ -800,10 +802,10 @@ class AnnotationModal(AnnotationLookupsMixin, QDialog):
             self.pro_gender_combo.setCurrentIndex(
                 gender_map.get(self.annotation.gender, 0)
             )
-        if self.annotation.number:
-            number_map = {"s": 1, "p": 2}
+        if self.annotation.pronoun_number:
+            number_map = {"s": 1, "d": 2, "pl": 3}
             self.pro_number_combo.setCurrentIndex(
-                number_map.get(self.annotation.number, 0)
+                number_map.get(self.annotation.pronoun_number, 0)
             )
         if self.annotation.case:
             case_map = {"n": 1, "a": 2, "g": 3, "d": 4, "i": 5}
@@ -995,7 +997,7 @@ class AnnotationModal(AnnotationLookupsMixin, QDialog):
         self.annotation.gender = self.GENDER_REVERSE_MAP.get(
             self.pro_gender_combo.currentIndex()
         )
-        self.annotation.number = self.NUMBER_REVERSE_MAP.get(
+        self.annotation.pronoun_number = self.PRONOUN_NUMBER_REVERSE_MAP.get(
             self.pro_number_combo.currentIndex()
         )
         self.annotation.case = self.CASE_REVERSE_MAP.get(
