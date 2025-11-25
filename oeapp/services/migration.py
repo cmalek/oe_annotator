@@ -92,7 +92,7 @@ class MigrationMetadataService(ProjectFoldersMixin):
         self.MIGRATION_VERSIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
         with self.MIGRATION_VERSIONS_PATH.open("w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2)
-        f.write("\n")
+            f.write("\n")
 
     def get_min_version_for_migration(self, migration_version: str) -> str | None:
         """
