@@ -71,7 +71,7 @@ class TokenDetailsSidebar(AnnotationLookupsMixin, QWidget):
             if widget is not None:
                 widget.deleteLater()
 
-    def update_token(self, token: Token, sentence: Sentence) -> None:
+    def update_token(self, token: Token, sentence: Sentence) -> None:  # noqa: PLR0912, PLR0915
         """
         Update the sidebar with token details.
 

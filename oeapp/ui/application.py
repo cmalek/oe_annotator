@@ -9,7 +9,6 @@ from oeapp.utils import get_resource_path
 
 from .main_window import MainWindow
 
-
 FONTS = [
     "assets/Maranatha.ttf",
     "assets/Anvers-Bold.ttf",
@@ -60,11 +59,8 @@ def create_application() -> QApplication:
             font_id = QFontDatabase.addApplicationFont(str(font_path))
             if font_id != -1:
                 # Font loaded successfully
-                # Query the font families to get the exact name
-                families = QFontDatabase.applicationFontFamilies(font_id)
-                # The font should be available now, even if we don't store the exact name
-                # Qt will match "Maranatha" to the loaded font family
-                print(f"Fonts loaded: {families}")
+                # Query the font families to get the exact names of the loaded fonts
+                families = QFontDatabase.applicationFontFamilies(font_id)  # noqa: F841
 
     window = MainWindow()
     window.show()

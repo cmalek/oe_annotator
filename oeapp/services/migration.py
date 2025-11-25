@@ -141,13 +141,13 @@ class MigrationMetadataService(ProjectFoldersMixin):
         versions[revision] = min_version
         migration_metadata_service.versions = versions
         if keys_to_remove:
-            print(
+            print(  # noqa: T201
                 f"Updated {migration_metadata_service.MIGRATION_VERSIONS_PATH!s}: "
                 f"Replaced {keys_to_remove} with {revision} for version "
                 f"{min_version}"
             )
         else:
-            print(
+            print(  # noqa: T201
                 f"Updated {migration_metadata_service.MIGRATION_VERSIONS_PATH!s} with "
                 f"{revision}: {min_version}"
             )

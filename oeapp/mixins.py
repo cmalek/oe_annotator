@@ -320,7 +320,6 @@ class AnnotationTextualMixin:
                 return context_str
             context_str += self.CASE_MAP[annotation.case]
             if annotation.pos == "R":
-                print(f"annotation.pronoun_number: {annotation.pronoun_number}")
                 if not annotation.pronoun_number:
                     return context_str
                 context_str += self.PRONOUN_NUMBER_MAP[annotation.pronoun_number]
