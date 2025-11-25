@@ -22,13 +22,16 @@ from oeapp.db import SessionLocal
 from oeapp.exc import MigrationFailed
 from oeapp.models.project import Project
 from oeapp.models.token import Token
-from oeapp.services import MigrationService
-from oeapp.services.autosave import AutosaveService
-from oeapp.services.backup import BackupService
-from oeapp.services.commands import CommandManager, MergeSentenceCommand
-from oeapp.services.export_docx import DOCXExporter
-from oeapp.services.filter import FilterService
-from oeapp.services.import_export import ProjectExporter, ProjectImporter
+from oeapp.services import (
+    AutosaveService,
+    BackupService,
+    CommandManager,
+    DOCXExporter,
+    MergeSentenceCommand,
+    MigrationService,
+    ProjectExporter,
+    ProjectImporter,
+)
 from oeapp.ui.dialogs import (
     BackupsViewDialog,
     DeleteProjectDialog,
@@ -39,8 +42,7 @@ from oeapp.ui.dialogs import (
     RestoreDialog,
     SettingsDialog,
 )
-from oeapp.ui.filter_dialog import FilterDialog
-from oeapp.ui.help_dialog import HelpDialog
+from oeapp.ui.dialogs.help_dialog import HelpDialog
 from oeapp.ui.menus import MainMenu
 from oeapp.ui.sentence_card import SentenceCard
 from oeapp.ui.token_details_sidebar import TokenDetailsSidebar
@@ -77,8 +79,6 @@ class MainWindow(QMainWindow):
         self.autosave_service: AutosaveService | None = None
         #: Command manager
         self.command_manager: CommandManager | None = None
-        #: Filter service
-        self.filter_service: FilterService | None = None
         #: Main window actions
         self.action_service = MainWindowActions(self)
         #: Currently selected sentence card
@@ -338,7 +338,6 @@ class MainWindow(QMainWindow):
         # Initialize autosave and command manager
         self.autosave_service = AutosaveService(self.action_service.autosave)
         self.command_manager = CommandManager(self.session)
-        self.filter_service = FilterService(self.session)
 
         # Clear existing content
         for i in reversed(range(self.content_layout.count())):
@@ -397,24 +396,6 @@ class MainWindow(QMainWindow):
         """
         dialog = HelpDialog(topic=topic, parent=self)
         dialog.show()
-
-    def show_filter_dialog(self) -> None:
-        """
-        Show filter dialog.
-        """
-        if not self.session or not self.current_project_id:
-            self.show_warning(
-                "Please create or open a project first.", title="No Project"
-            )
-            return
-
-        dialog = FilterDialog(
-            cast("FilterService", self.filter_service),
-            self.current_project_id,
-            parent=self,
-        )
-        dialog.token_selected.connect(self.action_service.navigate_to_token)
-        dialog.exec()
 
     def show_settings_dialog(self) -> None:
         """
@@ -523,7 +504,6 @@ class MainWindow(QMainWindow):
         # Preserve existing command manager to keep undo history
         existing_command_manager = self.command_manager
         existing_autosave = self.autosave_service
-        existing_filter = self.filter_service
 
         # Refresh the project configuration (reloads all sentence cards)
         self._configure_project(project)
@@ -533,8 +513,6 @@ class MainWindow(QMainWindow):
             self.command_manager = existing_command_manager
         if existing_autosave:
             self.autosave_service = existing_autosave
-        if existing_filter:
-            self.filter_service = existing_filter
 
         # Update all sentence cards to use the preserved command manager
         for card in self.sentence_cards:
@@ -599,7 +577,8 @@ class MainWindow(QMainWindow):
             ):
                 # Refresh sidebar with updated annotation
                 token = self.selected_sentence_card.tokens[token_index]
-                # Refresh token from database to ensure annotation relationship is up-to-date
+                # Refresh token from database to ensure annotation relationship
+                # is up-to-date
                 if self.session:
                     self.session.refresh(token)
                 self.token_details_sidebar.update_token(
@@ -794,7 +773,6 @@ class MainWindowActions:
         # Preserve existing services
         existing_command_manager = self.main_window.command_manager
         existing_autosave = self.main_window.autosave_service
-        existing_filter = self.main_window.filter_service
 
         # Refresh the project configuration (reloads all sentence cards)
         self.main_window._configure_project(project)
@@ -804,8 +782,6 @@ class MainWindowActions:
             self.main_window.command_manager = existing_command_manager
         if existing_autosave:
             self.main_window.autosave_service = existing_autosave
-        if existing_filter:
-            self.main_window.filter_service = existing_filter
 
         # Update all sentence cards to use the preserved command manager
         for card in self.main_window.sentence_cards:

@@ -24,15 +24,17 @@ from PySide6.QtWidgets import (
 
 from oeapp.models.annotation import Annotation
 from oeapp.models.sentence import Sentence
-from oeapp.services.commands import (
+from oeapp.services import (
     AnnotateTokenCommand,
     CommandManager,
     EditSentenceCommand,
     MergeSentenceCommand,
 )
-from oeapp.ui.annotation_modal import AnnotationModal
-from oeapp.ui.case_filter_dialog import CaseFilterDialog
-from oeapp.ui.pos_filter_dialog import POSFilterDialog
+from oeapp.ui.dialogs import (
+    AnnotationModal,
+    CaseFilterDialog,
+    POSFilterDialog,
+)
 from oeapp.ui.token_table import TokenTable
 
 if TYPE_CHECKING:

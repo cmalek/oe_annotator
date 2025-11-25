@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from oeapp.models.project import Project
 from oeapp.models.sentence import Sentence
-from oeapp.services import MigrationMetadataService, MigrationService
+
+from .migration import MigrationMetadataService, MigrationService
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session

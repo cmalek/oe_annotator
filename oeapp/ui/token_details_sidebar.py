@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from oeapp.ui.annotation_lookups import AnnotationLookupsMixin
+from oeapp.ui.mixins import AnnotationLookupsMixin
 
 if TYPE_CHECKING:
     from oeapp.models.annotation import Annotation

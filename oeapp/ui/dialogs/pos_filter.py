@@ -1,4 +1,4 @@
-"""Case filter dialog for selecting which cases to highlight."""
+"""POS filter dialog for selecting which parts of speech to highlight."""
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QCloseEvent, QFont
@@ -12,25 +12,25 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from oeapp.ui.annotation_lookups import AnnotationLookupsMixin
+from oeapp.ui.mixins import AnnotationLookupsMixin
 
 
-class CaseFilterDialog(AnnotationLookupsMixin, QDialog):
+class POSFilterDialog(AnnotationLookupsMixin, QDialog):
     """
-    Non-modal dialog for selecting which cases to highlight.
+    Non-modal dialog for selecting which parts of speech to highlight.
 
-    Displays checkboxes for each case with color indicators.
+    Displays checkboxes for each POS tag with color indicators.
     """
 
-    # Signal emitted when selected cases change
-    # Emits set of selected case codes (e.g., {"n", "a", "g"})
-    cases_changed = Signal(set)
+    # Signal emitted when selected POS tags change
+    # Emits set of selected POS codes (e.g., {"N", "V", "A"})
+    pos_changed = Signal(set)
     # Signal emitted when dialog is closed
     dialog_closed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """
-        Initialize case filter dialog.
+        Initialize POS filter dialog.
 
         Keyword Args:
             parent: Parent widget
@@ -38,13 +38,13 @@ class CaseFilterDialog(AnnotationLookupsMixin, QDialog):
         """
         super().__init__(parent)
         self.setModal(False)
-        self.setWindowTitle("Select Cases to Highlight")
+        self.setWindowTitle("Select Parts of Speech to Highlight")
         self.setMinimumWidth(300)
 
         # Store checkbox references
-        self.case_checkboxes: dict[str, QCheckBox] = {}
-        # Default: all cases selected
-        self._selected_cases: set[str] = {"n", "a", "g", "d", "i"}
+        self.pos_checkboxes: dict[str, QCheckBox] = {}
+        # Default: all POS tags selected
+        self._selected_pos: set[str] = {"N", "V", "A", "R", "D", "B", "C", "E", "I"}
 
         self._setup_ui()
 
@@ -54,18 +54,18 @@ class CaseFilterDialog(AnnotationLookupsMixin, QDialog):
         layout.setSpacing(10)
 
         # Title label
-        title_label = QLabel("Select Cases to Highlight")
+        title_label = QLabel("Select Parts of Speech to Highlight")
         title_font = QFont()
         title_font.setPointSize(12)
         title_font.setBold(True)
         title_label.setFont(title_font)
         layout.addWidget(title_label)
 
-        # Add checkboxes for each case
-        cases = ["n", "a", "g", "d", "i"]
-        for case_code in cases:
-            case_row = self._create_case_row(case_code)
-            layout.addLayout(case_row)
+        # Add checkboxes for each POS tag
+        pos_tags = ["N", "V", "A", "R", "D", "B", "C", "E", "I"]
+        for pos_code in pos_tags:
+            pos_row = self._create_pos_row(pos_code)
+            layout.addLayout(pos_row)
 
         layout.addStretch()
 
@@ -79,12 +79,12 @@ class CaseFilterDialog(AnnotationLookupsMixin, QDialog):
         button_layout.addWidget(deselect_all_button)
         layout.addLayout(button_layout)
 
-    def _create_case_row(self, case_code: str) -> QHBoxLayout:
+    def _create_pos_row(self, pos_code: str) -> QHBoxLayout:
         """
-        Create a row with checkbox and color indicator for a case.
+        Create a row with checkbox and color indicator for a POS tag.
 
         Args:
-            case_code: Case code (e.g., "n", "a", "g", "d", "i")
+            pos_code: POS code (e.g., "N", "V", "A", "R", "D", "B", "C", "E", "I")
 
         Returns:
             QHBoxLayout containing checkbox and color indicator
@@ -96,15 +96,17 @@ class CaseFilterDialog(AnnotationLookupsMixin, QDialog):
         row_layout.setSpacing(10)
 
         # Create checkbox
-        case_name = self.CASE_MAP.get(case_code, case_code)
-        checkbox = QCheckBox(case_name)
+        pos_name = self.PART_OF_SPEECH_MAP.get(pos_code, pos_code)
+        if pos_name is None:
+            pos_name = pos_code
+        checkbox = QCheckBox(pos_name)
         checkbox.setChecked(True)  # Default: all selected
         checkbox.stateChanged.connect(self._on_checkbox_changed)
-        self.case_checkboxes[case_code] = checkbox
+        self.pos_checkboxes[pos_code] = checkbox
         row_layout.addWidget(checkbox)
 
         # Create color indicator
-        color = SentenceCard.CASE_COLORS.get(case_code)
+        color = SentenceCard.POS_COLORS.get(pos_code)
         if color:
             color_label = QLabel()
             color_label.setFixedSize(20, 20)
@@ -113,7 +115,7 @@ class CaseFilterDialog(AnnotationLookupsMixin, QDialog):
             color_label.setStyleSheet(
                 f"background-color: {rgb}; border: 1px solid #999;"
             )
-            color_label.setToolTip(f"Color for {case_name}")
+            color_label.setToolTip(f"Color for {pos_name}")
             row_layout.addWidget(color_label)
 
         row_layout.addStretch()
@@ -122,50 +124,50 @@ class CaseFilterDialog(AnnotationLookupsMixin, QDialog):
     def _on_checkbox_changed(self) -> None:
         """Handle checkbox state change and emit signal."""
         selected = set()
-        for case_code, checkbox in self.case_checkboxes.items():
+        for pos_code, checkbox in self.pos_checkboxes.items():
             if checkbox.isChecked():
-                selected.add(case_code)
-        self._selected_cases = selected
-        self.cases_changed.emit(selected)
+                selected.add(pos_code)
+        self._selected_pos = selected
+        self.pos_changed.emit(selected)
 
     def _select_all(self) -> None:
-        """Select all case checkboxes."""
-        for checkbox in self.case_checkboxes.values():
+        """Select all POS checkboxes."""
+        for checkbox in self.pos_checkboxes.values():
             checkbox.setChecked(True)
 
     def _deselect_all(self) -> None:
-        """Deselect all case checkboxes."""
-        for checkbox in self.case_checkboxes.values():
+        """Deselect all POS checkboxes."""
+        for checkbox in self.pos_checkboxes.values():
             checkbox.setChecked(False)
 
-    def get_selected_cases(self) -> set[str]:
+    def get_selected_pos(self) -> set[str]:
         """
-        Get the currently selected cases.
+        Get the currently selected POS tags.
 
         Returns:
-            Set of selected case codes
+            Set of selected POS codes
 
         """
-        return self._selected_cases.copy()
+        return self._selected_pos.copy()
 
-    def set_selected_cases(self, cases: set[str]) -> None:
+    def set_selected_pos(self, pos_tags: set[str]) -> None:
         """
-        Set which cases are selected.
+        Set which POS tags are selected.
 
         Args:
-            cases: Set of case codes to select
+            pos_tags: Set of POS codes to select
 
         """
-        self._selected_cases = cases.copy()
+        self._selected_pos = pos_tags.copy()
         # Block signals temporarily to avoid multiple emissions
-        for checkbox in self.case_checkboxes.values():
+        for checkbox in self.pos_checkboxes.values():
             checkbox.blockSignals(True)  # noqa: FBT003
-        for case_code, checkbox in self.case_checkboxes.items():
-            checkbox.setChecked(case_code in cases)
-        for checkbox in self.case_checkboxes.values():
+        for pos_code, checkbox in self.pos_checkboxes.items():
+            checkbox.setChecked(pos_code in pos_tags)
+        for checkbox in self.pos_checkboxes.values():
             checkbox.blockSignals(False)  # noqa: FBT003
         # Emit signal once with final state
-        self.cases_changed.emit(self._selected_cases)
+        self.pos_changed.emit(self._selected_pos)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         """

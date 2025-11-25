@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from oeapp.models.annotation import Annotation
-from oeapp.ui.annotation_lookups import AnnotationLookupsMixin
+from oeapp.ui.mixins import AnnotationLookupsMixin
 
 if TYPE_CHECKING:
     from oeapp.models.token import Token

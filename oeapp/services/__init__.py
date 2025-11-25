@@ -9,7 +9,7 @@ from oeapp.services.commands import (
     MergeSentenceCommand,
 )
 from oeapp.services.export_docx import DOCXExporter
-from oeapp.services.filter import FilterService
+from oeapp.services.import_export import ProjectExporter, ProjectImporter
 from oeapp.services.migration import (
     FieldMappingService,
     MigrationMetadataService,
@@ -24,8 +24,9 @@ __all__ = [
     "DOCXExporter",
     "EditSentenceCommand",
     "FieldMappingService",
-    "FilterService",
     "MergeSentenceCommand",
     "MigrationMetadataService",
     "MigrationService",
+    "ProjectExporter",
+    "ProjectImporter",
 ]

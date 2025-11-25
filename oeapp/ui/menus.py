@@ -129,13 +129,6 @@ class FileMenu:
         )
         self.file_menu.addAction(export_action)
 
-        self.file_menu.addSeparator()
-
-        filter_action = QAction("&Filter Annotations...", self.file_menu)
-        filter_action.setShortcut(QKeySequence("Ctrl+F"))
-        filter_action.triggered.connect(self.main_window.show_filter_dialog)
-        self.file_menu.addAction(filter_action)
-
 
 class ToolsMenu:
     """
