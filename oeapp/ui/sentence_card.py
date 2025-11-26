@@ -150,6 +150,9 @@ class SentenceCard(QWidget):
         self._deselect_timer.setSingleShot(True)
         self._deselect_timer.timeout.connect(self._perform_deselection)
         self._pending_deselect_token_index: int | None = None
+        # Track OE edit mode state
+        self._oe_edit_mode: bool = False
+        self._original_oe_text: str | None = None
         self._setup_ui()
         self._setup_shortcuts()
 
@@ -229,6 +232,22 @@ class SentenceCard(QWidget):
         oe_label_layout.addWidget(oe_label)
         oe_label_layout.addStretch()
 
+        # Edit OE button
+        self.edit_oe_button = QPushButton("Edit OE")
+        self.edit_oe_button.clicked.connect(self._on_edit_oe_clicked)
+        oe_label_layout.addWidget(self.edit_oe_button)
+
+        # Save OE and Cancel Edit buttons (initially hidden)
+        self.save_oe_button = QPushButton("Save OE")
+        self.save_oe_button.clicked.connect(self._on_save_oe_clicked)
+        self.save_oe_button.setVisible(False)
+        oe_label_layout.addWidget(self.save_oe_button)
+
+        self.cancel_edit_button = QPushButton("Cancel Edit")
+        self.cancel_edit_button.clicked.connect(self._on_cancel_edit_clicked)
+        self.cancel_edit_button.setVisible(False)
+        oe_label_layout.addWidget(self.cancel_edit_button)
+
         # Dropdown for highlighting options
         highlighting_label = QLabel("Highlighting:")
         oe_label_layout.addWidget(highlighting_label)
@@ -243,6 +262,8 @@ class SentenceCard(QWidget):
         self.oe_text_edit.setText(self.sentence.text_oe)
         self.oe_text_edit.setFont(QFont("Anvers", 18))
         self.oe_text_edit.setPlaceholderText("Enter Old English text...")
+        # Make read-only by default (selectable but not editable)
+        self.oe_text_edit.setReadOnly(True)
         self.oe_text_edit.textChanged.connect(self._on_oe_text_changed)
         self.oe_text_edit.clicked.connect(self._on_oe_text_clicked)
         self.oe_text_edit.double_clicked.connect(self._on_oe_text_double_clicked)
@@ -623,9 +644,13 @@ class SentenceCard(QWidget):
 
     def _on_oe_text_changed(self) -> None:
         """Handle Old English text change."""
+        # Don't process changes if not in edit mode (shouldn't happen if signal is disconnected)
+        if not self._oe_edit_mode:
+            return
+
         # Clear temporary selection highlight when text is edited
         self._clear_highlight()
-        # Re-apply highlighting mode if active
+        # Re-apply highlighting mode if active (though highlights will be cleared when entering edit mode)
         if self._current_highlight_mode == "pos":
             self._apply_pos_highlighting()
         elif self._current_highlight_mode == "case":
@@ -633,7 +658,57 @@ class SentenceCard(QWidget):
         elif self._current_highlight_mode == "number":
             self._apply_number_highlighting()
 
+    def _on_edit_oe_clicked(self) -> None:
+        """Handle Edit OE button click - enter edit mode."""
+        # Set edit mode
+        self._oe_edit_mode = True
+        # Store original text
+        self._original_oe_text = self.oe_text_edit.toPlainText()
+        # Clear all highlighting
+        self._clear_all_highlights()
+        # Clear token selection highlight
+        self._clear_highlight()
+        # Reset highlighting dropdown to None (index 0)
+        self.highlighting_combo.blockSignals(True)  # noqa: FBT003
+        self.highlighting_combo.setCurrentIndex(0)
+        self.highlighting_combo.blockSignals(False)  # noqa: FBT003
+        self._current_highlight_mode = None
+        # Hide any open filter dialogs
+        if self._pos_filter_dialog is not None:
+            self._pos_filter_dialog.hide()
+        if self._case_filter_dialog is not None:
+            self._case_filter_dialog.hide()
+        # Hide Edit OE button
+        self.edit_oe_button.setVisible(False)
+        # Show Save OE and Cancel Edit buttons
+        self.save_oe_button.setVisible(True)
+        self.cancel_edit_button.setVisible(True)
+        # Enable editing
+        self.oe_text_edit.setReadOnly(False)
+        # Disconnect textChanged signal to prevent auto-tokenization
+        try:
+            self.oe_text_edit.textChanged.disconnect(self._on_oe_text_changed)
+        except TypeError:
+            # Signal not connected, ignore
+            pass
+
+    def _on_save_oe_clicked(self) -> None:
+        """Handle Save OE button click - save changes and exit edit mode."""
+        # Exit edit mode
+        self._oe_edit_mode = False
+        # Make read-only again
+        self.oe_text_edit.setReadOnly(True)
+        # Hide Save OE and Cancel Edit buttons
+        self.save_oe_button.setVisible(False)
+        self.cancel_edit_button.setVisible(False)
+        # Show Edit OE button
+        self.edit_oe_button.setVisible(True)
+        # Reconnect textChanged signal
+        self.oe_text_edit.textChanged.connect(self._on_oe_text_changed)
+
+        # Get new text and save
         if not self.session or not self.command_manager or not self.sentence.id:
+            self._original_oe_text = None
             return
 
         new_text = self.oe_text_edit.toPlainText()
@@ -652,6 +727,35 @@ class SentenceCard(QWidget):
                 # Refresh tokens after retokenization
                 self.session.refresh(self.sentence)
                 self.set_tokens(self.sentence.tokens)
+                # Re-apply highlighting if a mode is active
+                if self._current_highlight_mode == "pos":
+                    self._apply_pos_highlighting()
+                elif self._current_highlight_mode == "case":
+                    self._apply_case_highlighting()
+                elif self._current_highlight_mode == "number":
+                    self._apply_number_highlighting()
+
+        # Clear original text
+        self._original_oe_text = None
+
+    def _on_cancel_edit_clicked(self) -> None:
+        """Handle Cancel Edit button click - discard changes and exit edit mode."""
+        # Exit edit mode
+        self._oe_edit_mode = False
+        # Restore original text
+        if self._original_oe_text is not None:
+            self.oe_text_edit.setText(self._original_oe_text)
+        # Make read-only again
+        self.oe_text_edit.setReadOnly(True)
+        # Hide Save OE and Cancel Edit buttons
+        self.save_oe_button.setVisible(False)
+        self.cancel_edit_button.setVisible(False)
+        # Show Edit OE button
+        self.edit_oe_button.setVisible(True)
+        # Reconnect textChanged signal
+        self.oe_text_edit.textChanged.connect(self._on_oe_text_changed)
+        # Clear original text
+        self._original_oe_text = None
 
     def _on_translation_changed(self) -> None:
         """Handle translation text change."""
@@ -1222,6 +1326,24 @@ class SentenceCard(QWidget):
         """
         self.sentence = sentence
         self.sentence_number_label.setText(f"[{sentence.display_order}]")
+        # If we're in edit mode, exit it first
+        if self._oe_edit_mode:
+            # Restore read-only state
+            self.oe_text_edit.setReadOnly(True)
+            # Hide Save/Cancel buttons
+            self.save_oe_button.setVisible(False)
+            self.cancel_edit_button.setVisible(False)
+            # Show Edit OE button
+            self.edit_oe_button.setVisible(True)
+            # Reconnect textChanged signal if it was disconnected
+            try:
+                self.oe_text_edit.textChanged.connect(self._on_oe_text_changed)
+            except RuntimeError:
+                # Signal already connected, ignore
+                pass
+            # Reset edit mode state
+            self._oe_edit_mode = False
+            self._original_oe_text = None
         self.oe_text_edit.setText(sentence.text_oe)
         self.translation_edit.setPlainText(sentence.text_modern or "")
 
