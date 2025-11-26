@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     from oeapp.models.annotation import Annotation
+    from oeapp.models.token import Token
 
 
 class AnnotationTextualMixin:
@@ -357,3 +358,56 @@ class AnnotationTextualMixin:
                 return context_str
             context_str += self.PREP_CASE_MAP[annotation.prep_case]
         return context_str
+
+
+class TokenOccurrenceMixin:
+    """Mixin for finding token occurrences in text."""
+
+    def _find_token_occurrence(
+        self, text: str, token: Token, tokens: list[Token]
+    ) -> int | None:
+        """
+        Find the occurrence position of a token's surface text in the sentence.
+
+        Uses the token's order_index to determine which occurrence it represents
+        when the same surface text appears multiple times in the sentence.
+
+        Args:
+            text: The full sentence text
+            token: The token to find
+            tokens: List of all tokens in the sentence
+
+        Returns:
+            Character position of the token occurrence, or None if not found
+
+        """
+        surface = token.surface
+        # Find all occurrences of this surface text
+        occurrences = []
+        start = 0
+        while True:
+            pos = text.find(surface, start)
+            if pos == -1:
+                break
+            occurrences.append(pos)
+            start = pos + 1
+
+        if not occurrences:
+            return None
+
+        # Use order_index to determine which occurrence this token represents
+        # Count how many tokens with the same surface appear before this one
+        # Sort tokens by order_index to ensure correct counting
+        sorted_tokens = sorted(tokens, key=lambda t: t.order_index)
+        same_surface_count = 0
+        for t in sorted_tokens:
+            if t.order_index >= token.order_index:
+                break
+            if t.surface == surface:
+                same_surface_count += 1
+
+        # Select the occurrence at the same_surface_count index
+        if same_surface_count < len(occurrences):
+            return occurrences[same_surface_count]
+        # Fallback to first occurrence if index is out of range
+        return occurrences[0]

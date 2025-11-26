@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from oeapp.mixins import TokenOccurrenceMixin
 from oeapp.models.annotation import Annotation
 from oeapp.models.sentence import Sentence
 from oeapp.services import (
@@ -66,7 +67,7 @@ class ClickableTextEdit(QTextEdit):
         self.double_clicked.emit(event.position().toPoint())
 
 
-class SentenceCard(QWidget):
+class SentenceCard(TokenOccurrenceMixin, QWidget):
     """
     Widget representing a sentence card with annotations.
 
@@ -218,7 +219,7 @@ class SentenceCard(QWidget):
         # Header with sentence number and actions
         header_layout = QHBoxLayout()
         self.sentence_number_label = QLabel(f"[{self.sentence.display_order}]")
-        self.sentence_number_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        self.sentence_number_label.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
         header_layout.addWidget(self.sentence_number_label)
 
         # Action buttons
@@ -615,7 +616,7 @@ class SentenceCard(QWidget):
             if not surface:
                 continue
 
-            token_start = self._find_token_occurrence(text, token, surface)
+            token_start = self._find_token_occurrence(text, token, self.tokens)
             if token_start is None:
                 continue
 
@@ -630,51 +631,6 @@ class SentenceCard(QWidget):
         # If position is not within any token, find the nearest token
         # (useful for whitespace between tokens)
         return self._find_nearest_token(token_positions, position)
-
-    def _find_token_occurrence(
-        self, text: str, token: Token, surface: str
-    ) -> int | None:
-        """
-        Find the occurrence position of a token's surface text in the sentence.
-
-        Args:
-            text: The full sentence text
-            token: The token to find
-            surface: The surface text of the token
-
-        Returns:
-            Character position of the token occurrence, or None if not found
-
-        """
-        # Find all occurrences of this surface text
-        occurrences = []
-        start = 0
-        while True:
-            pos = text.find(surface, start)
-            if pos == -1:
-                break
-            occurrences.append(pos)
-            start = pos + 1
-
-        if not occurrences:
-            return None
-
-        # Use order_index to determine which occurrence this token represents
-        # Count how many tokens with the same surface appear before this one
-        # Sort tokens by order_index to ensure correct counting
-        sorted_tokens = sorted(self.tokens, key=lambda t: t.order_index)
-        same_surface_count = 0
-        for t in sorted_tokens:
-            if t.order_index >= token.order_index:
-                break
-            if t.surface == surface:
-                same_surface_count += 1
-
-        # Select the occurrence at the same_surface_count index
-        if same_surface_count < len(occurrences):
-            return occurrences[same_surface_count]
-        # Fallback to first occurrence if index is out of range
-        return occurrences[0]
 
     def _find_nearest_token(
         self, token_positions: list[tuple[int, int, int]], position: int
@@ -1120,7 +1076,7 @@ class SentenceCard(QWidget):
             return None
 
         # Find the occurrence position of this token
-        token_start = self._find_token_occurrence(text, token, surface)
+        token_start = self._find_token_occurrence(text, token, self.tokens)
         if token_start is None:
             return None
 
@@ -1294,7 +1250,7 @@ class SentenceCard(QWidget):
             if not surface:
                 continue
 
-            token_start = self._find_token_occurrence(text, token, surface)
+            token_start = self._find_token_occurrence(text, token, self.tokens)
             if token_start is not None:
                 token_end = token_start + len(surface)
                 token_positions.append((token_start, token_end))
@@ -1563,7 +1519,7 @@ class SentenceCard(QWidget):
         for token in sorted_tokens:
             if not token.id or not token.surface:
                 continue
-            token_start = self._find_token_occurrence(text, token, token.surface)
+            token_start = self._find_token_occurrence(text, token, self.tokens)
             if token_start is not None:
                 token_end = token_start + len(token.surface)
                 position_key = (token_start, token_end)

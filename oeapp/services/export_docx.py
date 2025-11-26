@@ -1,11 +1,11 @@
 """DOCX export service for Ænglisc Toolkit."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Pt, RGBColor
 
-from oeapp.mixins import AnnotationTextualMixin
+from oeapp.mixins import AnnotationTextualMixin, TokenOccurrenceMixin
 from oeapp.models.project import Project
 
 if TYPE_CHECKING:
@@ -16,9 +16,10 @@ if TYPE_CHECKING:
 
     from oeapp.models.annotation import Annotation
     from oeapp.models.sentence import Sentence
+    from oeapp.models.token import Token
 
 
-class DOCXExporter(AnnotationTextualMixin):
+class DOCXExporter(AnnotationTextualMixin, TokenOccurrenceMixin):
     """
     Exports annotated Old English text to DOCX format.
 
@@ -73,7 +74,10 @@ class DOCXExporter(AnnotationTextualMixin):
 
             # Add translation
             if text_modern:
-                doc.add_paragraph(text_modern)
+                translation_para = doc.add_paragraph()
+                translation_run = translation_para.add_run(text_modern)
+                translation_run.font.size = Pt(12)
+                translation_run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
             else:
                 # Empty translation paragraph
                 doc.add_paragraph()
@@ -106,13 +110,16 @@ class DOCXExporter(AnnotationTextualMixin):
         # Styles are already available in python-docx
         # Title, Body, Default are standard styles
 
-    def _add_oe_sentence_with_annotations(  # noqa: PLR0912, PLR0915
+    def _add_oe_sentence_with_annotations(
         self,
         doc: DocumentObject,
         sentence: Sentence,
     ) -> None:
         """
         Add Old English sentence with superscript/subscript annotations.
+
+        Uses the original sentence.text_oe to preserve all punctuation and spacing,
+        then adds annotations (pos, gender, context) for each token.
 
         Args:
             doc: Document to add to
@@ -122,119 +129,86 @@ class DOCXExporter(AnnotationTextualMixin):
         # Build paragraph with annotations
         para = doc.add_paragraph()  # type: ignore[attr-defined]
 
-        for i, token in enumerate(sentence.tokens):
-            surface = token.surface
+        # Use original sentence text to preserve punctuation
+        text = sentence.text_oe
+        tokens = list(sentence.tokens)
+
+        if not tokens:
+            # No tokens, just add the text as-is
+            para.add_run(text)
+            return
+
+        # Sort tokens by order_index to process them in order
+        sorted_tokens = sorted(tokens, key=lambda t: t.order_index)
+
+        # Find token positions in the original text
+        # (start, end, token) positions
+        token_positions: list[tuple[int, int, Token]] = []
+        used_positions: set[tuple[int, int]] = set()
+
+        for token in sorted_tokens:
+            if not token.surface:
+                continue
+            token_start = self._find_token_occurrence(text, token, tokens)
+            if token_start is not None:
+                token_end = token_start + len(token.surface)
+                position_key = (token_start, token_end)
+
+                # Only add if this position hasn't been used yet
+                if position_key not in used_positions:
+                    token_positions.append((token_start, token_end, token))
+                    used_positions.add(position_key)
+
+        # Sort by position
+        token_positions.sort(key=lambda x: x[0])
+
+        # Build document by preserving text between tokens
+        last_pos = 0
+        for token_start, token_end, token in token_positions:
+            # Skip if this token overlaps with a previous one
+            if token_start < last_pos:
+                continue
+
+            # Add text before token (preserving punctuation and spacing)
+            if token_start > last_pos:
+                para.add_run(text[last_pos:token_start])
+
+            # Add token with annotations
             annotation = token.annotation
 
+            # POS label (superscript)
+            pos_label = self.format_pos(cast("Annotation", annotation))
+            if pos_label:
+                pos_run = para.add_run(pos_label)
+                pos_run.font.size = Pt(8)
+                pos_run.font.superscript = True
+                pos_run.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
+
+            # Gender label (subscript)
+            gender_label = self.format_gender(cast("Annotation", annotation))
+            if gender_label:
+                gender_run = para.add_run(gender_label)
+                gender_run.font.size = Pt(8)
+                gender_run.font.subscript = True
+                gender_run.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
+
             # Add word
-            word_run = para.add_run(surface)
-            word_run.italic = True
+            word_run = para.add_run(token.surface)
+            word_run.font.size = Pt(12)
 
-            if annotation:
-                # Build superscript text (POS abbreviations, case, number, gender)
-                superscript_parts = []
+            # Context label (subscript)
+            context_label = self.format_context(cast("Annotation", annotation))
+            if context_label:
+                context_run = para.add_run(context_label)
+                context_run.font.size = Pt(8)
+                context_run.font.subscript = True
+                context_run.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
 
-                # Add POS abbreviations first
-                pos_label = self._format_pos(annotation)
-                if pos_label:
-                    superscript_parts.append(pos_label)
-                if annotation.article_type:
-                    superscript_parts.append(
-                        self.ARTICLE_TYPE_MAP.get(
-                            annotation.article_type, annotation.article_type
-                        )
-                    )
+            last_pos = token_end
 
-                # Add case/number/gender compact format
-                if annotation.case and annotation.number:
-                    case_str = self.CASE_MAP.get(annotation.case, "")
-                    number_str = self.NUMBER_MAP.get(annotation.number, "")
-                    if case_str and number_str:
-                        compact = f"{case_str}{number_str}"
-                        superscript_parts.append(compact)
-                elif annotation.case:
-                    superscript_parts.append(
-                        self.CASE_MAP.get(annotation.case, annotation.case)
-                    )
-                elif annotation.number:
-                    superscript_parts.append(
-                        self.NUMBER_MAP.get(annotation.number, annotation.number)
-                    )
-                if annotation.gender:
-                    superscript_parts.append(annotation.gender)
-
-                # Build subscript text (detailed morphological info)
-                subscript_parts = []
-                if annotation.declension:
-                    subscript_parts.append(annotation.declension)
-                if annotation.verb_class:
-                    subscript_parts.append(annotation.verb_class)
-                # Add compact case/number combinations like "dat1", "acc1"
-                if annotation.case and annotation.number:
-                    case_str = self.CASE_MAP.get(annotation.case, annotation.case)[:3]
-                    number_str = self.NUMBER_MAP.get(
-                        annotation.number, annotation.number
-                    )
-                    if annotation.case in [
-                        "d",
-                        "a",
-                        "g",
-                    ]:  # Common cases for compact format
-                        compact = f"{case_str}{number_str}"
-                        if compact not in subscript_parts:
-                            subscript_parts.insert(0, compact)
-
-                # Add uncertain marker
-                uncertain_marker = "?" if annotation.uncertain else ""
-                if annotation.alternatives_json:
-                    alternatives = f" / {annotation.alternatives_json}"
-                else:
-                    alternatives = ""
-
-                # Add superscript
-                if superscript_parts:
-                    sup_text = (
-                        "".join(superscript_parts) + uncertain_marker + alternatives
-                    )
-                    sup_run = para.add_run(sup_text)
-                    sup_run.font.size = Pt(8)
-                    sup_run.font.superscript = True
-
-                # Add subscript
-                if subscript_parts:
-                    sub_text = "".join(subscript_parts) + uncertain_marker
-                    sub_run = para.add_run(sub_text)
-                    sub_run.font.size = Pt(8)
-                    sub_run.font.subscript = True
-
-            # Add space after word (except last token)
-            if i < len(sentence.tokens) - 1:
-                para.add_run(" ")
-
-    def _format_pos(self, annotation: Annotation) -> str:
-        """
-        Format part of speech abbreviation for display.
-
-        Args:
-            annotation: Annotation object
-
-        Returns:
-            Formatted POS string
-
-        """
-        if not annotation.pos:
-            return ""
-
-        base = self.PART_OF_SPEECH_MAP.get(annotation.pos, annotation.pos.lower())
-
-        if annotation.pos == "R" and annotation.pronoun_type:
-            type_str = self.PRONOUN_TYPE_MAP.get(annotation.pronoun_type, "")
-            if type_str:
-                return f"{base}{type_str}"
-        elif annotation.pos == "V" and annotation.verb_class:
-            return f"{base}{annotation.verb_class}"
-
-        return base
+        # Add remaining text after last token
+        if last_pos < len(text):
+            para.add_run(text[last_pos:])
 
     def _add_notes(self, doc: DocumentObject, sentence: Sentence) -> None:
         """
@@ -271,7 +245,10 @@ class DOCXExporter(AnnotationTextualMixin):
             else:
                 note_line = f"{note_idx}. {note.note_text_md}"
 
-            doc.add_paragraph(note_line)
+            note_para = doc.add_paragraph()
+            note_run = note_para.add_run(note_line)
+            note_run.font.size = Pt(10)
+            note_run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
 
     def _sort_notes_by_position(self, sentence: Sentence) -> list:
         """
