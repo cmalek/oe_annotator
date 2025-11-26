@@ -3,10 +3,13 @@
 from oeapp.services.autosave import AutosaveService
 from oeapp.services.backup import BackupService
 from oeapp.services.commands import (
+    AddNoteCommand,
     AnnotateTokenCommand,
     CommandManager,
+    DeleteNoteCommand,
     EditSentenceCommand,
     MergeSentenceCommand,
+    UpdateNoteCommand,
 )
 from oeapp.services.export_docx import DOCXExporter
 from oeapp.services.import_export import ProjectExporter, ProjectImporter
@@ -17,10 +20,12 @@ from oeapp.services.migration import (
 )
 
 __all__ = [
+    "AddNoteCommand",
     "AnnotateTokenCommand",
     "AutosaveService",
     "BackupService",
     "CommandManager",
+    "DeleteNoteCommand",
     "DOCXExporter",
     "EditSentenceCommand",
     "FieldMappingService",
@@ -29,4 +34,5 @@ __all__ = [
     "MigrationService",
     "ProjectExporter",
     "ProjectImporter",
+    "UpdateNoteCommand",
 ]

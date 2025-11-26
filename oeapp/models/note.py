@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
+from sqlalchemy.orm import Mapped, Session, mapped_column, reconstructor, relationship
 
 from oeapp.db import Base
 from oeapp.models.token import Token
@@ -63,6 +63,35 @@ class Note(Base):
     end_token_rel: Mapped[Token | None] = relationship(
         "Token", foreign_keys=[end_token]
     )
+
+    @reconstructor
+    def _sanitize_foreign_keys(self) -> None:
+        """
+        Sanitize foreign key values when object is reconstructed from database.
+
+        Ensures that nullable foreign keys are None instead of 0 or False,
+        which can cause SQLAlchemy mapping errors.
+        """
+        # Convert 0 or False to None for nullable foreign keys
+        if self.start_token == 0 or self.start_token is False:
+            self.start_token = None
+        if self.end_token == 0 or self.end_token is False:
+            self.end_token = None
+
+    @classmethod
+    def get(cls, session: Session, note_id: int) -> Note | None:
+        """
+        Get a note by ID.
+
+        Args:
+            session: SQLAlchemy session
+            note_id: Note ID
+
+        Returns:
+            Note or None if not found
+
+        """
+        return session.get(cls, note_id)
 
     def to_json(self, session: Session) -> dict:
         """
@@ -129,14 +158,24 @@ class Note(Base):
             note.updated_at = updated_at
 
         # Resolve token references by order_index
+        # Ensure None instead of False or 0 for nullable foreign keys
         if "start_token_order_index" in note_data:
             order_idx = note_data["start_token_order_index"]
-            if order_idx in token_map:
+            if order_idx in token_map and token_map[order_idx].id:
                 note.start_token = token_map[order_idx].id
+            else:
+                note.start_token = None
+        else:
+            note.start_token = None
+
         if "end_token_order_index" in note_data:
             order_idx = note_data["end_token_order_index"]
-            if order_idx in token_map:
+            if order_idx in token_map and token_map[order_idx].id:
                 note.end_token = token_map[order_idx].id
+            else:
+                note.end_token = None
+        else:
+            note.end_token = None
 
         session.add(note)
         return note

@@ -196,6 +196,133 @@ class Token(Base):
         return tokens
 
     @classmethod
+    def _update_notes_for_token_changes(  # noqa: PLR0912, PLR0915
+        cls,
+        session,
+        sentence_id: int,
+        old_tokens: builtins.list[Token],
+        new_token_positions: dict[int, Token],
+        matched_token_ids: set[int],
+    ) -> None:
+        """
+        Update notes when tokens change.
+
+        Args:
+            session: SQLAlchemy session
+            sentence_id: Sentence ID
+            old_tokens: List of old tokens
+            new_token_positions: Dict mapping new position to token
+            matched_token_ids: Set of token IDs that were matched (kept)
+
+        """
+        from oeapp.models.sentence import Sentence  # noqa: PLC0415
+
+        sentence = Sentence.get(session, sentence_id)
+        if not sentence or not sentence.notes:
+            return
+
+        # Build mapping of old token ID to new token
+        old_token_id_to_new: dict[int, Token] = {}
+        for token in new_token_positions.values():
+            if token.id:
+                old_token_id_to_new[token.id] = token
+
+        # Build mapping of old order_index to new token
+        old_order_to_new_token: dict[int, Token] = {}
+        for old_token in old_tokens:
+            if old_token.id and old_token.id in matched_token_ids:
+                # This token was kept, find its new position
+                for new_token in new_token_positions.values():
+                    if new_token.id == old_token.id:
+                        old_order_to_new_token[old_token.order_index] = new_token
+                        break
+
+        # Process each note
+        notes_to_delete = []
+        for note in sentence.notes:
+            if not note.start_token or not note.end_token:
+                # Invalid note, mark for deletion
+                notes_to_delete.append(note)
+                continue
+
+            # Check if start/end tokens still exist
+            start_exists = note.start_token in matched_token_ids
+            end_exists = note.end_token in matched_token_ids
+
+            if not start_exists or not end_exists:
+                # One or both tokens were deleted
+                # Try to find replacement tokens based on position
+                # Get old token order indices
+                old_start_token = None
+                old_end_token = None
+                for old_token in old_tokens:
+                    if old_token.id == note.start_token:
+                        old_start_token = old_token
+                    if old_token.id == note.end_token:
+                        old_end_token = old_token
+
+                if old_start_token and old_end_token:
+                    # Try to find new tokens at same or nearby positions
+                    old_start_order = old_start_token.order_index
+                    old_end_order = old_end_token.order_index
+
+                    # Find closest new tokens
+                    new_start_token = None
+                    new_end_token = None
+                    min_start_dist = float("inf")
+                    min_end_dist = float("inf")
+
+                    for new_pos, new_token in new_token_positions.items():
+                        if new_token.id:
+                            # Check distance to old start position
+                            dist = abs(new_pos - old_start_order)
+                            if dist < min_start_dist:
+                                min_start_dist = dist
+                                new_start_token = new_token
+
+                            # Check distance to old end position
+                            dist = abs(new_pos - old_end_order)
+                            if dist < min_end_dist:
+                                min_end_dist = dist
+                                new_end_token = new_token
+
+                    if (
+                        new_start_token
+                        and new_end_token
+                        and new_start_token.id
+                        and new_end_token.id
+                    ):
+                        # Update note with new token IDs
+                        note.start_token = new_start_token.id
+                        note.end_token = new_end_token.id
+                        session.add(note)
+                    else:
+                        # Cannot find replacement tokens, mark for deletion
+                        notes_to_delete.append(note)
+                else:
+                    # Cannot find old tokens, mark for deletion
+                    notes_to_delete.append(note)
+            else:
+                # Both tokens exist, but check if range is still valid
+                # Get new tokens
+                new_start_token = old_token_id_to_new.get(note.start_token)
+                new_end_token = old_token_id_to_new.get(note.end_token)
+
+                if new_start_token and new_end_token:
+                    # Ensure start comes before end
+                    if new_start_token.order_index > new_end_token.order_index:
+                        # Swap them
+                        note.start_token = new_end_token.id
+                        note.end_token = new_start_token.id
+                        session.add(note)
+
+        # Delete notes that became invalid
+        for note in notes_to_delete:
+            session.delete(note)
+
+        session.flush()
+
+    @classmethod
     def tokenize(cls, sentence_text: str) -> builtins.list[str]:
         """
         Tokenize a sentence.
@@ -397,5 +524,10 @@ class Token(Base):
             if token.order_index != new_index:
                 token.order_index = new_index
                 session.add(token)
+
+        # Update notes for token changes
+        cls._update_notes_for_token_changes(
+            session, sentence_id, existing_tokens, matched_positions, matched_token_ids
+        )
 
         session.commit()

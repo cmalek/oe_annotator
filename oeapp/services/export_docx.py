@@ -7,7 +7,6 @@ from docx.shared import Pt
 
 from oeapp.mixins import AnnotationTextualMixin
 from oeapp.models.project import Project
-from oeapp.models.token import Token
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -241,6 +240,9 @@ class DOCXExporter(AnnotationTextualMixin):
         """
         Add notes for a sentence.
 
+        Notes are sorted by their position in the sentence (by start token
+        order_index) and numbered accordingly.
+
         Args:
             doc: Document to add to
             sentence: Sentence to add notes for
@@ -249,19 +251,100 @@ class DOCXExporter(AnnotationTextualMixin):
         if not sentence.notes:
             return
 
-        # Get token surfaces for note references
-        for note in sentence.notes:
-            if not note.start_token:
-                start_token = None
-            else:
-                start_token = Token.get(self.session, note.start_token)
-                if start_token is None:
-                    print(f"Note {note.id} has no start token")  # noqa: T201
-            note_text = note.note_text_md
+        # Sort notes by token position in sentence (earlier tokens = lower numbers)
+        notes = self._sort_notes_by_position(sentence)
 
-            # Format note
-            note_line = (
-                f"{start_token.surface}, {note_text}" if start_token else note_text
-            )
+        # Build token ID to order_index mapping for token lookups
+        token_id_to_order: dict[int, int] = {}
+        for token in sentence.tokens:
+            if token.id:
+                token_id_to_order[token.id] = token.order_index
+
+        # Display each note with dynamic numbering (1-based index)
+        for note_idx, note in enumerate(notes, start=1):
+            # Get token text for the note
+            token_text = self._get_note_token_text(note, sentence, token_id_to_order)
+
+            # Format note: "1. "quoted tokens" in italics - note text"
+            if token_text:
+                note_line = f'{note_idx}. "{token_text}" - {note.note_text_md}'
+            else:
+                note_line = f"{note_idx}. {note.note_text_md}"
 
             doc.add_paragraph(note_line)
+
+    def _sort_notes_by_position(self, sentence: Sentence) -> list:
+        """
+        Sort notes by their position in the sentence (by start token order_index).
+
+        Args:
+            sentence: Sentence to get notes from
+
+        Returns:
+            Sorted list of notes
+
+        """
+        # Build token ID to order_index mapping
+        token_id_to_order: dict[int, int] = {}
+        for token in sentence.tokens:
+            if token.id:
+                token_id_to_order[token.id] = token.order_index
+
+        def get_note_position(note) -> int:
+            """Get position of note in sentence based on start token."""
+            if note.start_token and note.start_token in token_id_to_order:
+                return token_id_to_order[note.start_token]
+            # Fallback to end_token if start_token not found
+            if note.end_token and note.end_token in token_id_to_order:
+                return token_id_to_order[note.end_token]
+            # Fallback to very high number if neither found
+            return 999999
+
+        # Sort notes by position
+        return sorted(sentence.notes, key=get_note_position)
+
+    def _get_note_token_text(
+        self,
+        note,
+        sentence: Sentence,
+        token_id_to_order: dict[int, int],  # noqa: ARG002
+    ) -> str:
+        """
+        Get token text for a note.
+
+        Args:
+            note: Note to get tokens for
+            sentence: Sentence containing the tokens
+            token_id_to_order: Map of token ID to order_index
+
+        Returns:
+            Token text string (space-separated tokens)
+
+        """
+        if not note.start_token or not note.end_token:
+            return ""
+
+        # Find tokens by ID
+        start_token = None
+        end_token = None
+        for token in sentence.tokens:
+            if token.id == note.start_token:
+                start_token = token
+            if token.id == note.end_token:
+                end_token = token
+
+        if not start_token or not end_token:
+            return ""
+
+        # Get all tokens in range
+        tokens_in_range = []
+        in_range = False
+        for token in sorted(sentence.tokens, key=lambda t: t.order_index):
+            if token.id == start_token.id:
+                in_range = True
+            if in_range:
+                tokens_in_range.append(token.surface)
+            if token.id == end_token.id:
+                break
+
+        return " ".join(tokens_in_range)

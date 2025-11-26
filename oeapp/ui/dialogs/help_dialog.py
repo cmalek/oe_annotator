@@ -121,6 +121,7 @@ class HelpDialog(QDialog):
         "Keybindings": "keybindings.md",
         "Annotation Guide": "annotation-guide.md",
         "Incremental Annotation": "incremental-annotation.md",
+        "Notes Guide": "notes-guide.md",
         "Export Formatting": "export-formatting.md",
         "Project Export/Import": "project-export-import.md",
         "Automatic Backups": "automatic-backups.md",

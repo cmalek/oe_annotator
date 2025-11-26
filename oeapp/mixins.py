@@ -328,12 +328,12 @@ class AnnotationTextualMixin:
                     return context_str
                 context_str += self.NUMBER_MAP[annotation.number]
         elif annotation.pos == "V":
-            if annotation.verb_form == "part":
+            if annotation.verb_form == "p":
                 # If it's a participle, just return the form, and the tense
                 context_str += "part"
                 if not annotation.verb_tense:
                     return context_str
-                context_str += self.VERB_TENSE_MAP[annotation.verb_tense]
+                context_str += f":{self.VERB_TENSE_MAP[annotation.verb_tense]}"
             elif annotation.verb_form == "inf":
                 # If it's an infinitive, just return the form
                 context_str = "inf"

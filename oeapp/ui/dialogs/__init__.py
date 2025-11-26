@@ -6,6 +6,7 @@ from oeapp.ui.dialogs.help_dialog import HelpDialog
 from oeapp.ui.dialogs.import_project import ImportProjectDialog
 from oeapp.ui.dialogs.migration_failure import MigrationFailureDialog
 from oeapp.ui.dialogs.new_project import NewProjectDialog
+from oeapp.ui.dialogs.note_dialog import NoteDialog
 from oeapp.ui.dialogs.open_project import OpenProjectDialog
 from oeapp.ui.dialogs.pos_filter import POSFilterDialog
 from oeapp.ui.dialogs.restore import RestoreDialog
@@ -20,6 +21,7 @@ __all__ = [
     "ImportProjectDialog",
     "MigrationFailureDialog",
     "NewProjectDialog",
+    "NoteDialog",
     "OpenProjectDialog",
     "POSFilterDialog",
     "RestoreDialog",
