@@ -184,6 +184,7 @@ class AnnotationLookupsMixin:
         "f": "Finite (f)",
         "i": "Infinitive (i)",
         "p": "Participle (p)",
+        "inf": "Inflected Infinitive (inf)",
     }
     VERB_FORM_REVERSE_MAP: Final[dict[int, str]] = {
         i: k for i, k in enumerate(VERB_FORM_MAP.keys()) if k is not None

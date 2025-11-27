@@ -58,7 +58,9 @@ class Annotation(AnnotationTextualMixin, Base):
         CheckConstraint(
             "verb_aspect IN ('p','f','prg','gn')", name="ck_annotations_verb_aspect"
         ),
-        CheckConstraint("verb_form IN ('f','i','p')", name="ck_annotations_verb_form"),
+        CheckConstraint(
+            "verb_form IN ('f','i','p', 'inf')", name="ck_annotations_verb_form"
+        ),
         CheckConstraint("prep_case IN ('a','d','g')", name="ck_annotations_prep_case"),
         CheckConstraint(
             "confidence >= 0 AND confidence <= 100", name="ck_annotations_confidence"

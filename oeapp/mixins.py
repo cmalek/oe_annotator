@@ -147,6 +147,7 @@ class AnnotationTextualMixin:
         "f": "",
         "i": "inf",
         "p": "part",
+        "inf": "inf:infl",
     }
 
     #: Verb number map.
