@@ -33,6 +33,7 @@ from oeapp.services import (
     AddSentenceCommand,
     AnnotateTokenCommand,
     CommandManager,
+    DeleteSentenceCommand,
     EditSentenceCommand,
     MergeSentenceCommand,
 )
@@ -88,6 +89,8 @@ class SentenceCard(TokenOccurrenceMixin, QWidget):
     sentence_merged = Signal(int)  # Emits current sentence ID
     # Signal emitted when a sentence is added
     sentence_added = Signal(int)  # Emits new sentence ID
+    # Signal emitted when a sentence is deleted
+    sentence_deleted = Signal(int)  # Emits deleted sentence ID
     # Signal emitted when a token is selected for details sidebar
     # Note: Using object for SentenceCard to avoid circular import
     token_selected_for_details = Signal(
@@ -239,12 +242,13 @@ class SentenceCard(TokenOccurrenceMixin, QWidget):
         self.add_sentence_button.setMenu(add_sentence_menu)
         self.merge_button = QPushButton("Merge with next")
         self.merge_button.clicked.connect(self._on_merge_clicked)
-        # self.delete_button = QPushButton("Delete")
+        self.delete_button = QPushButton("Delete")
+        self.delete_button.clicked.connect(self._on_delete_clicked)
         header_layout.addStretch()
         # header_layout.addWidget(self.split_button)
         header_layout.addWidget(self.add_sentence_button)
         header_layout.addWidget(self.merge_button)
-        # header_layout.addWidget(self.delete_button)
+        header_layout.addWidget(self.delete_button)
         layout.addLayout(header_layout)
 
         # Old English text line (editable) with highlighting dropdown
@@ -1775,6 +1779,56 @@ class SentenceCard(TokenOccurrenceMixin, QWidget):
                 self,
                 "Add Sentence Failed",
                 "Failed to add sentence. Please try again.",
+            )
+
+    def _on_delete_clicked(self) -> None:
+        """
+        Handle Delete button click.
+
+        Shows confirmation dialog and deletes the sentence if confirmed.
+        """
+        if not self.session or not self.sentence.id or not self.command_manager:
+            return
+
+        # Show confirmation dialog
+        message = (
+            f"Delete sentence {self.sentence.display_order}?\n\n"
+            f"This will permanently delete the sentence, including its "
+            f"Old English text, Modern English translation, tokens, "
+            f"annotations, and notes. This action can be undone."
+        )
+        msg_box = QMessageBox(
+            QMessageBox.Icon.Question,
+            "Confirm Delete",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            self,
+        )
+        msg_box.setDefaultButton(QMessageBox.StandardButton.No)
+        # Set custom icon
+        logo_pixmap = get_logo_pixmap(75)
+        if logo_pixmap:
+            msg_box.setIconPixmap(logo_pixmap)
+        reply = msg_box.exec()
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # Create and execute delete command
+        command = DeleteSentenceCommand(
+            session=self.session,
+            sentence_id=self.sentence.id,
+        )
+
+        if self.command_manager.execute(command):
+            # Emit signal to refresh UI
+            if self.sentence.id:
+                self.sentence_deleted.emit(self.sentence.id)
+        else:
+            QMessageBox.warning(
+                self,
+                "Delete Failed",
+                "Failed to delete sentence. Please try again.",
             )
 
     def get_oe_text(self) -> str:

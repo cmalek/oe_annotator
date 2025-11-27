@@ -366,6 +366,7 @@ class MainWindow(QMainWindow):
             card.oe_text_edit.textChanged.connect(self._on_sentence_text_changed)
             card.sentence_merged.connect(self._on_sentence_merged)
             card.sentence_added.connect(self._on_sentence_added)
+            card.sentence_deleted.connect(self._on_sentence_deleted)
             card.token_selected_for_details.connect(self._on_token_selected_for_details)
             card.annotation_applied.connect(self._on_annotation_applied)
             self.sentence_cards.append(card)
@@ -593,6 +594,48 @@ class MainWindow(QMainWindow):
 
         self.show_message("Sentence added", duration=2000)
 
+    def _on_sentence_deleted(self, sentence_id: int) -> None:
+        """
+        Handle sentence deleted signal.
+
+        Reloads the project from the database to refresh all sentence cards
+        after a deletion operation.
+
+        Args:
+            sentence_id: ID of the deleted sentence
+
+        """
+        if not self.session or not self.current_project_id:
+            return
+
+        # Reload project from database
+        project = Project.get(self.session, self.current_project_id)
+        if project is None:
+            return
+
+        # Preserve existing command manager to keep undo history
+        existing_command_manager = self.command_manager
+        existing_autosave = self.autosave_service
+
+        # Refresh the project configuration (reloads all sentence cards)
+        self._configure_project(project)
+
+        # Restore preserved services
+        if existing_command_manager:
+            self.command_manager = existing_command_manager
+        if existing_autosave:
+            self.autosave_service = existing_autosave
+
+        # Update all sentence cards to use the preserved command manager
+        for card in self.sentence_cards:
+            card.command_manager = self.command_manager
+
+        # Ensure UI is updated/repainted
+        self.scroll_area.update()
+        self.update()
+
+        self.show_message("Sentence deleted", duration=2000)
+
     def _on_token_selected_for_details(
         self, token: Token, sentence: Sentence, sentence_card: SentenceCard
     ) -> None:
@@ -765,7 +808,9 @@ class MainWindowActions:
                 # After undo, the command is in redo_stack, check if it was a structural change
                 if not needs_full_reload and self.command_manager.redo_stack:
                     last_undone = self.command_manager.redo_stack[-1]
-                    if isinstance(last_undone, (MergeSentenceCommand, AddSentenceCommand)):
+                    if isinstance(
+                        last_undone, (MergeSentenceCommand, AddSentenceCommand)
+                    ):
                         needs_full_reload = True
 
                 if needs_full_reload:
@@ -797,7 +842,9 @@ class MainWindowActions:
                 # After redo, the command is in undo_stack, check if it was a structural change
                 if not needs_full_reload and self.command_manager.undo_stack:
                     last_redone = self.command_manager.undo_stack[-1]
-                    if isinstance(last_redone, (MergeSentenceCommand, AddSentenceCommand)):
+                    if isinstance(
+                        last_redone, (MergeSentenceCommand, AddSentenceCommand)
+                    ):
                         needs_full_reload = True
 
                 if needs_full_reload:

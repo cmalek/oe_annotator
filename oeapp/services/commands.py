@@ -355,30 +355,7 @@ class MergeSentenceCommand(Command):
         # CRITICAL: Restore display_order for subsequent sentences FIRST
         # This must happen before recreating the next sentence to avoid
         # unique constraint violations
-        # Use a two-phase approach to avoid conflicts:
-        # 1. Move all sentences to temporary positions (negative values)
-        # 2. Then move them to their final positions
-        if self.display_order_changes:
-            # Phase 1: Move to temporary positions
-            temp_offset = -10000  # Use a large negative offset to avoid conflicts
-            for sentence_id, _old_order, _new_order in self.display_order_changes:
-                sentence = Sentence.get(self.session, sentence_id)
-                if sentence:
-                    sentence.display_order = temp_offset
-                    temp_offset -= 1
-                    self.session.add(sentence)
-            self.session.flush()
-
-            # Phase 2: Move to final positions (process in reverse order)
-            sorted_changes = sorted(
-                self.display_order_changes, key=lambda x: x[1], reverse=True
-            )  # Sort by old_order descending
-            for sentence_id, old_order, _new_order in sorted_changes:
-                sentence = Sentence.get(self.session, sentence_id)
-                if sentence:
-                    sentence.display_order = old_order
-                    self.session.add(sentence)
-            self.session.flush()  # Ensure display_order changes are applied
+        Sentence.restore_display_orders(self.session, self.display_order_changes)
 
         # Now recreate next sentence (will get a new ID, which is fine)
         next_sentence = Sentence(
@@ -493,25 +470,11 @@ class AddSentenceCommand(Command):
 
         # Two-phase approach to avoid constraint violations
         if affected_sentences:
-            # Track old orders before Phase 1
-            old_orders = {s.id: s.display_order for s in affected_sentences}
-
-            # Phase 1: Move to temporary positions
-            temp_offset = -10000
-            for sentence in affected_sentences:
-                sentence.display_order = temp_offset
-                temp_offset -= 1
-                self.session.add(sentence)
-            self.session.flush()
-
-            # Phase 2: Move to final positions (increment by 1)
-            for sentence in affected_sentences:
-                old_order = old_orders[sentence.id]
-                new_order = old_order + 1
-                sentence.display_order = new_order
-                self.display_order_changes.append((sentence.id, old_order, new_order))
-                self.session.add(sentence)
-            self.session.flush()
+            self.display_order_changes = Sentence.renumber_sentences(
+                self.session,
+                affected_sentences,
+                order_function=lambda s: s.display_order + 1,
+            )
 
         # Create new sentence with empty text_oe
         new_sentence = Sentence.create(
@@ -546,28 +509,7 @@ class AddSentenceCommand(Command):
             self.session.flush()
 
         # Restore display_order using two-phase approach
-        if self.display_order_changes:
-            # Phase 1: Move to temporary positions
-            temp_offset = -10000
-            for sentence_id, _old_order, _new_order in self.display_order_changes:
-                sentence = Sentence.get(self.session, sentence_id)
-                if sentence:
-                    sentence.display_order = temp_offset
-                    temp_offset -= 1
-                    self.session.add(sentence)
-            self.session.flush()
-
-            # Phase 2: Restore original display_order values
-            # Sort by old_order descending (process in reverse order)
-            sorted_changes = sorted(
-                self.display_order_changes, key=lambda x: x[1], reverse=True
-            )
-            for sentence_id, old_order, _new_order in sorted_changes:
-                sentence = Sentence.get(self.session, sentence_id)
-                if sentence:
-                    sentence.display_order = old_order
-                    self.session.add(sentence)
-            self.session.flush()
+        Sentence.restore_display_orders(self.session, self.display_order_changes)
 
         self.session.commit()
         return True
@@ -582,6 +524,192 @@ class AddSentenceCommand(Command):
         """
         position_str = "before" if self.position == "before" else "after"
         return f"Add sentence {position_str} sentence {self.reference_sentence_id}"
+
+
+@dataclass
+class DeleteSentenceCommand(Command):
+    """Command for deleting a sentence."""
+
+    #: The SQLAlchemy session.
+    session: Session
+    #: The sentence ID to delete.
+    sentence_id: int
+    #: Before state: sentence data for restoration
+    sentence_data: dict[str, Any] = field(default_factory=dict)
+    #: Before state: tokens from sentence
+    sentence_tokens: list[dict[str, Any]] = field(default_factory=list)
+    #: Before state: notes from sentence
+    sentence_notes: list[dict[str, Any]] = field(default_factory=list)
+    #: Before state: display order changes (sentence_id, old_order, new_order)
+    display_order_changes: list[tuple[int, int, int]] = field(default_factory=list)
+
+    def execute(self) -> bool:
+        """
+        Execute delete operation.
+
+        Returns:
+            True if successful, False otherwise
+
+        """
+        sentence = Sentence.get(self.session, self.sentence_id)
+        if sentence is None:
+            return False
+
+        # Store sentence data for undo
+        self.sentence_data = {
+            "id": sentence.id,
+            "project_id": sentence.project_id,
+            "display_order": sentence.display_order,
+            "text_oe": sentence.text_oe,
+            "text_modern": sentence.text_modern,
+        }
+
+        # Store tokens from sentence (before deletion)
+        sentence_tokens = list(sentence.tokens)
+        self.sentence_tokens = [
+            {
+                "id": token.id,
+                "sentence_id": token.sentence_id,
+                "order_index": token.order_index,
+                "surface": token.surface,
+                "lemma": token.lemma,
+                # Store annotation data by order_index (since token IDs will change)
+                "annotation": token.annotation.to_json() if token.annotation else None,
+            }
+            for token in sentence_tokens
+        ]
+
+        # Store notes from sentence (store by order_index instead of token_id)
+        sentence_notes = list(sentence.notes)
+        self.sentence_notes = []
+        for note in sentence_notes:
+            # Find order_index for start and end tokens
+            start_order = None
+            end_order = None
+            for token in sentence_tokens:
+                if token.id == note.start_token:
+                    start_order = token.order_index
+                if token.id == note.end_token:
+                    end_order = token.order_index
+            self.sentence_notes.append(
+                {
+                    "id": note.id,
+                    "sentence_id": note.sentence_id,
+                    "start_token_order_index": start_order,
+                    "end_token_order_index": end_order,
+                    "note_text_md": note.note_text_md,
+                    "note_type": note.note_type,
+                }
+            )
+
+        # Store sentence's display_order before deletion
+        deleted_display_order = sentence.display_order
+        project_id = sentence.project_id
+
+        # Delete sentence (cascade will delete tokens and notes)
+        self.session.delete(sentence)
+        self.session.flush()  # Flush to ensure deletion happens before updates
+
+        # Update display_order for all subsequent sentences (decrement by 1)
+        # Use two-phase approach to avoid unique constraint violations
+        subsequent_sentences = Sentence.subsequent_sentences(
+            self.session, project_id, deleted_display_order
+        )
+        if subsequent_sentences:
+            self.display_order_changes = Sentence.renumber_sentences(
+                self.session,
+                subsequent_sentences,
+                order_function=lambda s: s.display_order - 1,
+            )
+
+        self.session.commit()
+        return True
+
+    def undo(self) -> bool:
+        """
+        Undo delete operation.
+
+        CRITICAL: Uses two-phase approach to handle unique constraint on
+        (project_id, display_order).
+
+        Returns:
+            True if successful, False otherwise
+
+        """
+        # CRITICAL: Restore display_order for subsequent sentences FIRST
+        # This must happen before recreating the sentence to avoid
+        # unique constraint violations
+        Sentence.restore_display_orders(
+            self.session, self.display_order_changes
+        )  # Ensure display_order changes are applied
+
+        # Recreate sentence (will get a new ID, which is fine)
+        restored_sentence = Sentence(
+            project_id=self.sentence_data["project_id"],
+            display_order=self.sentence_data["display_order"],
+            text_oe=self.sentence_data["text_oe"],
+            text_modern=self.sentence_data["text_modern"],
+        )
+        self.session.add(restored_sentence)
+        self.session.flush()  # Get the new ID
+
+        # Update sentence text to trigger tokenization (creates new tokens with new IDs)
+        restored_sentence.update(self.session, self.sentence_data["text_oe"])
+        self.session.add(restored_sentence)
+        self.session.flush()
+
+        # Build mapping of order_index to new token IDs
+        restored_tokens = list(restored_sentence.tokens)
+        order_index_to_token_id: dict[int, int] = {}
+        for token in restored_tokens:
+            if token.id and token.order_index is not None:
+                order_index_to_token_id[token.order_index] = token.id
+
+        # Restore annotations using order_index mapping
+        for token_data in self.sentence_tokens:
+            order_index = token_data["order_index"]
+            annotation_data = token_data.get("annotation")
+            if annotation_data and order_index in order_index_to_token_id:
+                new_token_id = order_index_to_token_id[order_index]
+                # Create annotation with new token_id
+                Annotation.from_json(self.session, new_token_id, annotation_data)
+
+        # Restore notes using order_index mapping
+        for note_data in self.sentence_notes:
+            start_order = note_data.get("start_token_order_index")
+            end_order = note_data.get("end_token_order_index")
+            start_token_id = (
+                order_index_to_token_id.get(start_order)
+                if start_order is not None
+                else None
+            )
+            end_token_id = (
+                order_index_to_token_id.get(end_order)
+                if end_order is not None
+                else None
+            )
+
+            restored_note = Note(
+                sentence_id=restored_sentence.id,
+                start_token=start_token_id,
+                end_token=end_token_id,
+                note_text_md=note_data["note_text_md"],
+                note_type=note_data["note_type"],
+            )
+            self.session.add(restored_note)
+
+        self.session.commit()
+        return True
+
+    def get_description(self) -> str:
+        """
+        Get command description.
+
+        Returns:
+            Description string
+
+        """
+        return f"Delete sentence {self.sentence_id}"
 
 
 class CommandManager:

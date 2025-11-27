@@ -15,6 +15,8 @@ from oeapp.models.token import Token
 from oeapp.utils import from_utc_iso, to_utc_iso
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from oeapp.models.project import Project
 
 
@@ -185,6 +187,115 @@ class Sentence(Base):
                 .order_by(cls.display_order)
             ).all()
         )
+
+    @classmethod
+    def renumber_sentences(
+        cls,
+        session: Session,
+        sentences: builtins.list[Sentence],
+        order_mapping: dict[int, int] | None = None,
+        order_function: Callable[[Sentence], int] | None = None,
+    ) -> builtins.list[tuple[int, int, int]]:
+        """
+        Update display_order for multiple sentences using two-phase approach.
+
+        This method safely updates display_order values for multiple sentences
+        to avoid unique constraint violations on (project_id, display_order).
+
+        Args:
+            session: SQLAlchemy session
+            sentences: List of sentences to update
+            order_mapping: Optional dict mapping sentence.id -> new display_order
+            order_function: Optional function taking Sentence -> new display_order
+
+        Returns:
+            List of (sentence_id, old_order, new_order) tuples tracking changes
+
+        Raises:
+            ValueError: If neither order_mapping nor order_function is provided
+
+        """
+        if not sentences:
+            return []
+
+        if order_mapping is None and order_function is None:
+            msg = "Either order_mapping or order_function must be provided"
+            raise ValueError(msg)
+
+        # Track old orders before Phase 1
+        old_orders = {s.id: s.display_order for s in sentences}
+
+        # Phase 1: Move to temporary positions
+        temp_offset = -10000
+        for sentence in sentences:
+            sentence.display_order = temp_offset
+            temp_offset -= 1
+            session.add(sentence)
+        session.flush()
+
+        # Phase 2: Move to final positions
+        # CRITICAL: Use old_orders for computation, not current sentence.display_order
+        # because sentences have been moved to temporary positions in Phase 1
+        changes: builtins.list[tuple[int, int, int]] = []
+        for sentence in sentences:
+            old_order = old_orders[sentence.id]
+            if order_mapping:
+                new_order = order_mapping[sentence.id]
+            else:
+                assert order_function is not None  # noqa: S101
+                # Temporarily restore display_order for order_function computation
+                # The order_function needs to see the original display_order value
+                sentence.display_order = old_order
+                new_order = order_function(sentence)
+            sentence.display_order = new_order
+            changes.append((sentence.id, old_order, new_order))
+            session.add(sentence)
+        session.flush()
+
+        return changes
+
+    @classmethod
+    def restore_display_orders(
+        cls,
+        session: Session,
+        changes: builtins.list[tuple[int, int, int]],
+    ) -> None:
+        """
+        Restore display_order values using two-phase approach.
+
+        This method safely restores display_order values from a list of changes,
+        where each change is (sentence_id, old_order, new_order). It restores
+        sentences to their old_order values.
+
+        Args:
+            session: SQLAlchemy session
+            changes: List of (sentence_id, old_order, new_order) tuples
+
+        """
+        if not changes:
+            return
+
+        # Phase 1: Move to temporary positions
+        temp_offset = -10000
+        for sentence_id, _old_order, _new_order in changes:
+            sentence = cls.get(session, sentence_id)
+            if sentence:
+                sentence.display_order = temp_offset
+                temp_offset -= 1
+                session.add(sentence)
+        session.flush()
+
+        # Phase 2: Restore original display_order values
+        # Sort by old_order descending (process in reverse order)
+        sorted_changes: builtins.list[tuple[int, int, int]] = sorted(
+            changes, key=lambda x: x[1], reverse=True
+        )
+        for sentence_id, old_order, _new_order in sorted_changes:
+            sentence = cls.get(session, sentence_id)
+            if sentence:
+                sentence.display_order = old_order
+                session.add(sentence)
+        session.flush()
 
     def to_json(self, session: Session) -> dict:
         """
