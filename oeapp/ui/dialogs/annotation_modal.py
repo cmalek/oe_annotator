@@ -1,6 +1,6 @@
 """Annotation modal dialog."""
 
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import TYPE_CHECKING, ClassVar, Final, cast
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -28,6 +28,11 @@ if TYPE_CHECKING:
 
 class AnnotationModal(AnnotationLookupsMixin, QDialog):
     """Modal dialog for annotating tokens with prompt-based entry."""
+
+    #: Dialog width
+    DIALOG_WIDTH: Final[int] = 500
+    #: Dialog height
+    DIALOG_HEIGHT: Final[int] = 600
 
     annotation_applied = Signal(Annotation)
 
@@ -71,7 +76,7 @@ class AnnotationModal(AnnotationLookupsMixin, QDialog):
         """
         self.setWindowTitle(f"Annotate: {self.token.surface}")
         self.setModal(True)
-        self.resize(500, 600)
+        self.resize(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
 
         layout = QVBoxLayout(self)
 
