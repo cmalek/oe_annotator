@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QMessageBox,
     QPushButton,
     QTextEdit,
@@ -29,6 +30,7 @@ from oeapp.mixins import TokenOccurrenceMixin
 from oeapp.models.annotation import Annotation
 from oeapp.models.sentence import Sentence
 from oeapp.services import (
+    AddSentenceCommand,
     AnnotateTokenCommand,
     CommandManager,
     EditSentenceCommand,
@@ -84,6 +86,8 @@ class SentenceCard(TokenOccurrenceMixin, QWidget):
 
     # Signal emitted when a sentence is merged
     sentence_merged = Signal(int)  # Emits current sentence ID
+    # Signal emitted when a sentence is added
+    sentence_added = Signal(int)  # Emits new sentence ID
     # Signal emitted when a token is selected for details sidebar
     # Note: Using object for SentenceCard to avoid circular import
     token_selected_for_details = Signal(
@@ -225,11 +229,20 @@ class SentenceCard(TokenOccurrenceMixin, QWidget):
 
         # Action buttons
         # self.split_button = QPushButton("Split")
+        self.add_sentence_button = QPushButton("Add Sentence")
+        # Create menu for Add Sentence button
+        add_sentence_menu = QMenu(self)
+        before_action = add_sentence_menu.addAction("Before")
+        before_action.triggered.connect(self._on_add_sentence_before_clicked)
+        after_action = add_sentence_menu.addAction("After")
+        after_action.triggered.connect(self._on_add_sentence_after_clicked)
+        self.add_sentence_button.setMenu(add_sentence_menu)
         self.merge_button = QPushButton("Merge with next")
         self.merge_button.clicked.connect(self._on_merge_clicked)
         # self.delete_button = QPushButton("Delete")
         header_layout.addStretch()
         # header_layout.addWidget(self.split_button)
+        header_layout.addWidget(self.add_sentence_button)
         header_layout.addWidget(self.merge_button)
         # header_layout.addWidget(self.delete_button)
         layout.addLayout(header_layout)
@@ -790,6 +803,25 @@ class SentenceCard(TokenOccurrenceMixin, QWidget):
         self._render_oe_text_with_superscripts()
         # Clear original text
         self._original_oe_text = None
+
+    def enter_edit_mode(self) -> bool:
+        """
+        Programmatically enter edit mode and focus the Old English text box.
+
+        Returns:
+            True if successful, False otherwise
+
+        """
+        if self._oe_edit_mode:
+            # Already in edit mode, just focus
+            self.oe_text_edit.setFocus()
+            return True
+
+        # Enter edit mode
+        self._on_edit_oe_clicked()
+        # Set focus on OE text edit
+        self.oe_text_edit.setFocus()
+        return True
 
     def _on_translation_changed(self) -> None:
         """Handle translation text change."""
@@ -1691,6 +1723,58 @@ class SentenceCard(TokenOccurrenceMixin, QWidget):
                 self,
                 "Merge Failed",
                 "Failed to merge sentences. Please try again.",
+            )
+
+    def _on_add_sentence_before_clicked(self) -> None:
+        """
+        Handle Add Sentence Before button click.
+
+        Creates a new empty sentence before the current sentence.
+        """
+        if not self.session or not self.sentence.id or not self.command_manager:
+            return
+
+        command = AddSentenceCommand(
+            session=self.session,
+            project_id=self.sentence.project_id,
+            reference_sentence_id=self.sentence.id,
+            position="before",
+        )
+
+        if self.command_manager.execute(command):
+            if command.new_sentence_id:
+                self.sentence_added.emit(command.new_sentence_id)
+        else:
+            QMessageBox.warning(
+                self,
+                "Add Sentence Failed",
+                "Failed to add sentence. Please try again.",
+            )
+
+    def _on_add_sentence_after_clicked(self) -> None:
+        """
+        Handle Add Sentence After button click.
+
+        Creates a new empty sentence after the current sentence.
+        """
+        if not self.session or not self.sentence.id or not self.command_manager:
+            return
+
+        command = AddSentenceCommand(
+            session=self.session,
+            project_id=self.sentence.project_id,
+            reference_sentence_id=self.sentence.id,
+            position="after",
+        )
+
+        if self.command_manager.execute(command):
+            if command.new_sentence_id:
+                self.sentence_added.emit(command.new_sentence_id)
+        else:
+            QMessageBox.warning(
+                self,
+                "Add Sentence Failed",
+                "Failed to add sentence. Please try again.",
             )
 
     def get_oe_text(self) -> str:

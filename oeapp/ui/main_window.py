@@ -23,6 +23,7 @@ from oeapp.exc import MigrationFailed
 from oeapp.models.project import Project
 from oeapp.models.token import Token
 from oeapp.services import (
+    AddSentenceCommand,
     AutosaveService,
     BackupService,
     CommandManager,
@@ -364,6 +365,7 @@ class MainWindow(QMainWindow):
             card.translation_edit.textChanged.connect(self._on_translation_changed)
             card.oe_text_edit.textChanged.connect(self._on_sentence_text_changed)
             card.sentence_merged.connect(self._on_sentence_merged)
+            card.sentence_added.connect(self._on_sentence_added)
             card.token_selected_for_details.connect(self._on_token_selected_for_details)
             card.annotation_applied.connect(self._on_annotation_applied)
             self.sentence_cards.append(card)
@@ -536,6 +538,61 @@ class MainWindow(QMainWindow):
 
         self.show_message("Sentences merged", duration=2000)
 
+    def _on_sentence_added(self, sentence_id: int) -> None:
+        """
+        Handle sentence added signal.
+
+        Reloads the project from the database to refresh all sentence cards
+        after adding a new sentence, then puts the new sentence card in edit mode.
+
+        Args:
+            sentence_id: ID of the newly added sentence
+
+        """
+        if not self.session or not self.current_project_id:
+            return
+
+        # Reload project from database
+        project = Project.get(self.session, self.current_project_id)
+        if project is None:
+            return
+
+        # Preserve existing command manager to keep undo history
+        existing_command_manager = self.command_manager
+        existing_autosave = self.autosave_service
+
+        # Refresh the project configuration (reloads all sentence cards)
+        self._configure_project(project)
+
+        # Restore preserved services
+        if existing_command_manager:
+            self.command_manager = existing_command_manager
+        if existing_autosave:
+            self.autosave_service = existing_autosave
+
+        # Update all sentence cards to use the preserved command manager
+        for card in self.sentence_cards:
+            card.command_manager = self.command_manager
+
+        # Find the sentence card with matching sentence.id
+        new_card = None
+        for card in self.sentence_cards:
+            if card.sentence.id == sentence_id:
+                new_card = card
+                break
+
+        if new_card:
+            # Scroll card into view
+            self.ensure_visible(new_card)
+            # Enter edit mode and focus OE text box
+            new_card.enter_edit_mode()
+
+        # Ensure UI is updated/repainted
+        self.scroll_area.update()
+        self.update()
+
+        self.show_message("Sentence added", duration=2000)
+
     def _on_token_selected_for_details(
         self, token: Token, sentence: Sentence, sentence_card: SentenceCard
     ) -> None:
@@ -696,19 +753,19 @@ class MainWindowActions:
         - If the undo fails, show a message in the status bar.
         """
         if self.command_manager and self.command_manager.can_undo():
-            # Check if the command to undo is a structural change (like merge)
+            # Check if the command to undo is a structural change (like merge or add sentence)
             needs_full_reload = False
             if self.command_manager.undo_stack:
                 last_command = self.command_manager.undo_stack[-1]
-                if isinstance(last_command, MergeSentenceCommand):
+                if isinstance(last_command, (MergeSentenceCommand, AddSentenceCommand)):
                     needs_full_reload = True
 
             if self.command_manager.undo():
                 self.main_window.show_message("Undone")
-                # After undo, the command is in redo_stack, check if it was a merge
+                # After undo, the command is in redo_stack, check if it was a structural change
                 if not needs_full_reload and self.command_manager.redo_stack:
                     last_undone = self.command_manager.redo_stack[-1]
-                    if isinstance(last_undone, MergeSentenceCommand):
+                    if isinstance(last_undone, (MergeSentenceCommand, AddSentenceCommand)):
                         needs_full_reload = True
 
                 if needs_full_reload:
@@ -728,19 +785,19 @@ class MainWindowActions:
         - If the redo fails, show a message in the status bar.
         """
         if self.command_manager and self.command_manager.can_redo():
-            # Check if the command to redo is a structural change (like merge)
+            # Check if the command to redo is a structural change (like merge or add sentence)
             needs_full_reload = False
             if self.command_manager.redo_stack:
                 last_command = self.command_manager.redo_stack[-1]
-                if isinstance(last_command, MergeSentenceCommand):
+                if isinstance(last_command, (MergeSentenceCommand, AddSentenceCommand)):
                     needs_full_reload = True
 
             if self.command_manager.redo():
                 self.main_window.show_message("Redone")
-                # After redo, the command is in undo_stack, check if it was a merge
+                # After redo, the command is in undo_stack, check if it was a structural change
                 if not needs_full_reload and self.command_manager.undo_stack:
                     last_redone = self.command_manager.undo_stack[-1]
-                    if isinstance(last_redone, MergeSentenceCommand):
+                    if isinstance(last_redone, (MergeSentenceCommand, AddSentenceCommand)):
                         needs_full_reload = True
 
                 if needs_full_reload:

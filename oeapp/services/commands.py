@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+from sqlalchemy import select
+
 from oeapp.models.annotation import Annotation
 from oeapp.models.note import Note
 from oeapp.models.sentence import Sentence
@@ -421,6 +423,161 @@ class MergeSentenceCommand(Command):
 
         """
         return f"Merge sentence {self.current_sentence_id} with {self.next_sentence_id}"
+
+
+@dataclass
+class AddSentenceCommand(Command):
+    """Command for adding a new sentence before or after an existing sentence."""
+
+    #: The SQLAlchemy session.
+    session: Session
+    #: The project ID.
+    project_id: int
+    #: The reference sentence ID (sentence to insert before/after).
+    reference_sentence_id: int
+    #: The position relative to reference sentence.
+    position: Literal["before", "after"]
+    #: The new sentence ID (set after execution).
+    new_sentence_id: int | None = None
+    #: Display order changes (sentence_id, old_order, new_order).
+    display_order_changes: list[tuple[int, int, int]] = field(default_factory=list)
+
+    def execute(self) -> bool:
+        """
+        Execute add sentence operation.
+
+        CRITICAL: Uses two-phase approach to handle unique constraint on
+        (project_id, display_order).
+
+        Returns:
+            True if successful, False otherwise
+
+        """
+        reference_sentence = Sentence.get(self.session, self.reference_sentence_id)
+        if reference_sentence is None:
+            return False
+
+        # Calculate target display_order
+        if self.position == "before":
+            target_order = reference_sentence.display_order
+        else:  # "after"
+            target_order = reference_sentence.display_order + 1
+
+        # Get all sentences that need display_order updates
+        if self.position == "before":
+            # For "before", we need sentences with display_order >= target_order
+            # Query sentences with display_order >= target_order
+            affected_sentences = list(
+                self.session.scalars(
+                    select(Sentence)
+                    .where(
+                        Sentence.project_id == self.project_id,
+                        Sentence.display_order >= target_order,
+                    )
+                    .order_by(Sentence.display_order.desc())
+                ).all()
+            )
+        else:  # "after"
+            # For "after", we need sentences with display_order > reference_order
+            affected_sentences = Sentence.subsequent_sentences(
+                self.session, self.project_id, reference_sentence.display_order
+            )
+            # Sort descending for processing
+            affected_sentences = sorted(
+                affected_sentences, key=lambda s: s.display_order, reverse=True
+            )
+
+        # Two-phase approach to avoid constraint violations
+        if affected_sentences:
+            # Track old orders before Phase 1
+            old_orders = {s.id: s.display_order for s in affected_sentences}
+
+            # Phase 1: Move to temporary positions
+            temp_offset = -10000
+            for sentence in affected_sentences:
+                sentence.display_order = temp_offset
+                temp_offset -= 1
+                self.session.add(sentence)
+            self.session.flush()
+
+            # Phase 2: Move to final positions (increment by 1)
+            for sentence in affected_sentences:
+                old_order = old_orders[sentence.id]
+                new_order = old_order + 1
+                sentence.display_order = new_order
+                self.display_order_changes.append((sentence.id, old_order, new_order))
+                self.session.add(sentence)
+            self.session.flush()
+
+        # Create new sentence with empty text_oe
+        new_sentence = Sentence.create(
+            session=self.session,
+            project_id=self.project_id,
+            display_order=target_order,
+            text_oe="",
+        )
+        self.new_sentence_id = new_sentence.id
+
+        self.session.commit()
+        return True
+
+    def undo(self) -> bool:
+        """
+        Undo add sentence operation.
+
+        CRITICAL: Uses two-phase approach to handle unique constraint on
+        (project_id, display_order).
+
+        Returns:
+            True if successful, False otherwise
+
+        """
+        if self.new_sentence_id is None:
+            return False
+
+        # Delete the new sentence first
+        new_sentence = Sentence.get(self.session, self.new_sentence_id)
+        if new_sentence:
+            self.session.delete(new_sentence)
+            self.session.flush()
+
+        # Restore display_order using two-phase approach
+        if self.display_order_changes:
+            # Phase 1: Move to temporary positions
+            temp_offset = -10000
+            for sentence_id, _old_order, _new_order in self.display_order_changes:
+                sentence = Sentence.get(self.session, sentence_id)
+                if sentence:
+                    sentence.display_order = temp_offset
+                    temp_offset -= 1
+                    self.session.add(sentence)
+            self.session.flush()
+
+            # Phase 2: Restore original display_order values
+            # Sort by old_order descending (process in reverse order)
+            sorted_changes = sorted(
+                self.display_order_changes, key=lambda x: x[1], reverse=True
+            )
+            for sentence_id, old_order, _new_order in sorted_changes:
+                sentence = Sentence.get(self.session, sentence_id)
+                if sentence:
+                    sentence.display_order = old_order
+                    self.session.add(sentence)
+            self.session.flush()
+
+        self.session.commit()
+        return True
+
+    def get_description(self) -> str:
+        """
+        Get command description.
+
+        Returns:
+            Description string
+
+        """
+        position_str = "before" if self.position == "before" else "after"
+        return f"Add sentence {position_str} sentence {self.reference_sentence_id}"
 
 
 class CommandManager:

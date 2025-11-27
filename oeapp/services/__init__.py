@@ -4,6 +4,7 @@ from oeapp.services.autosave import AutosaveService
 from oeapp.services.backup import BackupService
 from oeapp.services.commands import (
     AddNoteCommand,
+    AddSentenceCommand,
     AnnotateTokenCommand,
     CommandManager,
     DeleteNoteCommand,
@@ -21,6 +22,7 @@ from oeapp.services.migration import (
 
 __all__ = [
     "AddNoteCommand",
+    "AddSentenceCommand",
     "AnnotateTokenCommand",
     "AutosaveService",
     "BackupService",
