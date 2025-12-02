@@ -117,6 +117,43 @@ class Project(Base):
         session.commit()
         return project
 
+    def append_oe_text(self, session: Session, text: str) -> None:
+        """
+        Append Old English text to the end of this project.
+
+        The Old English text is split into sentences and appended after the last
+        sentence in the project.  If the project has no sentences, the new
+        sentences start from display_order 1.
+
+        Args:
+            session: SQLAlchemy session
+            text: Old English text to process and append to the project
+
+        """
+        # Find the maximum display_order for existing sentences
+        max_order = (
+            session.scalar(
+                select(func.max(Sentence.display_order)).where(
+                    Sentence.project_id == self.id
+                )
+            )
+            or 0
+        )
+
+        # Split text into sentences
+        sentences_text = self.split_sentences(text)
+
+        # Create new sentences starting from max_order + 1
+        for order_offset, sentence_text in enumerate(sentences_text, 1):
+            Sentence.create(
+                session=session,
+                project_id=self.id,
+                display_order=max_order + order_offset,
+                text_oe=sentence_text,
+            )
+
+        session.commit()
+
     def to_json(self) -> dict:
         """
         Serialize project to JSON-compatible dictionary (without PKs).

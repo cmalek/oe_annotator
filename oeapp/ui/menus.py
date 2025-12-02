@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QMenu, QMenuBar
 
-from oeapp.ui.dialogs import NewProjectDialog, OpenProjectDialog
+from oeapp.ui.dialogs import AppendTextDialog, NewProjectDialog, OpenProjectDialog
 
 if TYPE_CHECKING:
     from oeapp.ui.main_window import MainWindow
@@ -228,6 +228,7 @@ class ProjectMenu:
     """
     A "Project" menu to be added to the main menu bar with the following actions:
 
+    - Append OE text...
     - Export...
     - Import...
     """
@@ -246,10 +247,19 @@ class ProjectMenu:
         This means adding a "Project" menu to the main menu bar, with the
         following actions: with the following actions:
 
+        - Append OE text...
         - Export...
         - Import...
         """
         self.project_menu = self.main_menu.add_menu("&Project")
+
+        append_action = QAction("Append &OE text...", self.project_menu)
+        append_action.triggered.connect(
+            lambda: AppendTextDialog(self.main_window).execute()
+        )
+        self.project_menu.addAction(append_action)
+
+        self.project_menu.addSeparator()
 
         export_action = QAction("&Export...", self.project_menu)
         export_action.triggered.connect(self.main_window.export_project_json)

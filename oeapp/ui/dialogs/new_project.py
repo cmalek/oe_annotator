@@ -1,28 +1,23 @@
-from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
-    QTextEdit,
     QVBoxLayout,
-    QWidget,
 )
 
 from oeapp.exc import AlreadyExists
 from oeapp.models.project import Project
 
+from .mixins import TextInputMixin
+
 if TYPE_CHECKING:
     from oeapp.ui.main_window import MainWindow
 
 
-class NewProjectDialog:
+class NewProjectDialog(TextInputMixin):
     """
     New project dialog.  This gets opened when the user clicks the "New Project..."
     menu item from the File menu.
@@ -46,39 +41,8 @@ class NewProjectDialog:
         """
         Initialize new project dialog.
         """
+        super().__init__()
         self.main_window = main_window
-
-    def browse_file(self) -> None:
-        """
-        Open a file dialog to select a file and update the file path edit field.
-
-        This should be connected to the "Browse" button in _add_file_browser_widget.
-        """
-        file_path, _ = QFileDialog.getOpenFileName(
-            self.dialog,
-            "Select Text File",
-            "",
-            "Text Files (*.txt);;All Files (*)",
-        )
-        if file_path:
-            self.selected_file_path = file_path
-            self.file_path_edit.setText(file_path)
-
-    def toggle_input_method(self, index: int) -> None:
-        """
-        Toggle the visibility of the text label, text edit, file label, and file
-        browser widget based on the index.
-        """
-        if index == 0:
-            self.text_label.setVisible(True)
-            self.text_edit.setVisible(True)
-            self.file_label.setVisible(False)
-            self.file_browser_widget.setVisible(False)
-        else:
-            self.text_label.setVisible(False)
-            self.text_edit.setVisible(False)
-            self.file_label.setVisible(True)
-            self.file_browser_widget.setVisible(True)
 
     def build(self) -> None:
         """
@@ -105,15 +69,8 @@ class NewProjectDialog:
 
         self._add_button_box()
 
-        # Set initial visibility of the text label, text edit, file label, and
-        # file browser widget
-        self.text_label.setVisible(True)
-        self.text_edit.setVisible(True)
-        self.file_label.setVisible(False)
-        self.file_browser_widget.setVisible(False)
-
-        # Connect the input method selector to the toggle_input_method function
-        self.input_method_combo.currentIndexChanged.connect(self.toggle_input_method)
+        # Set up text input widgets (visibility and signals)
+        self._setup_text_input()
 
     def _add_title_edit(self) -> None:
         """
@@ -124,81 +81,6 @@ class NewProjectDialog:
         self.title_edit.setPlaceholderText("Enter project title...")
         self.layout.addWidget(QLabel("Project Title:"))
         self.layout.addWidget(self.title_edit)
-
-    def _add_input_method_selector(self) -> None:
-        """
-        Add the input method selector to the dialog.  The input method selector
-        will be used to determine which input method to use.
-
-        - Paste in text (default)
-        - Import from file
-
-        Choosing "Import from file" will show a file browser widget and a file
-        path edit field, and hide the text area for pasting in text.
-
-        Choosing "Paste in text" will show a text area for pasting in text, and
-        hide the file browser widget and file path edit field.
-
-        """
-        self.input_method_combo = QComboBox(self.dialog)
-        self.input_method_combo.addItems(["Paste in text", "Import from file"])
-        self.layout.addWidget(QLabel("Input Method:"))
-        self.layout.addWidget(self.input_method_combo)
-
-    def _add_text_area(self) -> None:
-        """
-        Add the text area to the dialog.  The text area will be used to paste in text.
-        """
-        self.text_edit = QTextEdit(self.dialog)
-        self.text_edit.setPlaceholderText("Paste Old English text here...")
-        self.text_edit.setMinimumHeight(400)
-        self.text_label = QLabel("Old English Text:")
-        self.layout.addWidget(self.text_label)
-        self.layout.addWidget(self.text_edit)
-
-    def open_file_dialog(self) -> None:
-        """
-        Open a file dialog to select a file and update the file path edit field.
-
-        The file dialog should be positioned below the file path edit field.
-        """
-        # Map the bottom left of file_path_edit to global coordinates
-        edit_rect = self.file_path_edit.rect()
-        global_point = self.file_path_edit.mapToGlobal(edit_rect.bottomLeft())
-        # Create and show the QFileDialog at the desired position
-        dialog = QFileDialog(self.dialog, "Select Text File")
-        dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
-        dialog.setNameFilter("Text Files (*.txt);;All Files (*)")
-        # Position the dialog below the file_path_edit field
-        dialog.move(global_point)
-        if dialog.exec():
-            files = dialog.selectedFiles()
-            if files:
-                self.selected_file_path = files[0]
-                self.file_path_edit.setText(self.selected_file_path)
-
-    def _add_file_browser_widget(self) -> None:
-        """
-        Add the file browser widget to the dialog.  The file browser widget will
-        be used to browse the file system for a file to import.
-        """
-        file_browser_layout = QHBoxLayout()
-        self.file_path_edit = QLineEdit(self.dialog)
-        self.file_path_edit.setPlaceholderText("No file selected...")
-        self.file_path_edit.setReadOnly(True)
-
-        browse_button = QPushButton("Browse...")
-        file_browser_layout.addWidget(self.file_path_edit)
-        file_browser_layout.addWidget(browse_button)
-
-        self.file_browser_widget = QWidget(self.dialog)
-        self.file_browser_widget.setLayout(file_browser_layout)
-        self.file_label = QLabel("Old English Text File:")
-
-        self.layout.addWidget(self.file_label)
-        self.layout.addWidget(self.file_browser_widget)
-
-        browse_button.clicked.connect(self.open_file_dialog)
 
     def _add_button_box(self) -> None:
         """
@@ -240,27 +122,24 @@ class NewProjectDialog:
             self.main_window.show_error("Please enter a project title.")
             return
 
-        # Get text based on input method
-        if self.input_method_combo.currentIndex() == 0:  # Paste in text
-            text = self.text_edit.toPlainText()
-        else:  # Import from file
-            if not self.selected_file_path:
-                self.main_window.show_error("Please select a file to import.")
-                return
-            text = Path(self.file_path_edit.text()).read_text(encoding="utf-8")
+        # Get text from input using mixin method
+        try:
+            text = self.get_text_from_input()
+        except ValueError as e:
+            self.main_window.show_error(str(e))
+            return
 
-        if text.strip():
-            try:
-                self.create_project(text, title)
-            except AlreadyExists:
-                self.main_window.show_error(
-                    f'Project with title "{title!s}" already exists. Please '
-                    "choose a different title or delete the existing project."
-                )
-        else:
-            self.main_window.show_error("Please enter or import Old English text.")
-        self.dialog.close()
-        self.main_window.show_message(f'Project created: "{title!s}"', duration=2000)
+        try:
+            self.create_project(text, title)
+            self.dialog.close()
+            self.main_window.show_message(
+                f'Project created: "{title!s}"', duration=2000
+            )
+        except AlreadyExists:
+            self.main_window.show_error(
+                f'Project with title "{title!s}" already exists. Please '
+                "choose a different title or delete the existing project."
+            )
 
     def execute(self) -> None:
         """
