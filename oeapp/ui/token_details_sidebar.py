@@ -96,7 +96,9 @@ class TokenDetailsSidebar(AnnotationLookupsMixin, QWidget):
         # Paragraph/sentence number label on its own line
         paragraph_num = sentence.paragraph_number
         sentence_num = sentence.sentence_number_in_paragraph
-        number_label = QLabel(f"¶:{paragraph_num} S:{sentence_num}")
+        number_label = QLabel(
+            f"[{sentence.display_order}] ¶:{paragraph_num} S:{sentence_num}"
+        )
         number_label.setFont(QFont("Helvetica", 12, QFont.Weight.Bold))
         number_label.setStyleSheet("color: #333;")
         self.content_layout.addWidget(number_label)

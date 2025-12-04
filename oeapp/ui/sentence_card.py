@@ -229,7 +229,9 @@ class SentenceCard(TokenOccurrenceMixin, QWidget):
         header_layout = QHBoxLayout()
         paragraph_num = self.sentence.paragraph_number
         sentence_num = self.sentence.sentence_number_in_paragraph
-        self.sentence_number_label = QLabel(f"¶:{paragraph_num} S:{sentence_num}")
+        self.sentence_number_label = QLabel(
+            f"[{self.sentence.display_order}] ¶:{paragraph_num} S:{sentence_num}"
+        )
         self.sentence_number_label.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
         header_layout.addWidget(self.sentence_number_label)
 
@@ -1930,7 +1932,9 @@ class SentenceCard(TokenOccurrenceMixin, QWidget):
         self.sentence = sentence
         paragraph_num = sentence.paragraph_number
         sentence_num = sentence.sentence_number_in_paragraph
-        self.sentence_number_label.setText(f"¶:{paragraph_num} S:{sentence_num}")
+        self.sentence_number_label.setText(
+            f"[{sentence.display_order}] ¶:{paragraph_num} S:{sentence_num}"
+        )
         self._update_paragraph_button_state()
         # If we're in edit mode, exit it first
         if self._oe_edit_mode:
