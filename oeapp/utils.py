@@ -88,5 +88,8 @@ def get_logo_pixmap(size: int = 75) -> QPixmap | None:
         return None
     # Scale to specified size while maintaining aspect ratio
     return pixmap.scaled(
-        size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+        size,
+        size,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
     )

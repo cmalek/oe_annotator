@@ -23,11 +23,11 @@ def get_project_db_path() -> Path:
     Get the path to the project database.
 
     - On Windows, the database is created in the user's
-        ``AppData/Local/oe_annotator/projects`` directory.
+        ``AppData/Local/Ænglisc Toolkit/projects`` directory.
     - On macOS, the database is created in the user's
-        ``~/Library/Application Support/oe_annotator/projects`` directory.
+        ``~/Library/Application Support/Ænglisc Toolkit/projects`` directory.
     - On Linux, the database is created in the user's
-        ``~/.config/oe_annotator/projects`` directory.
+        ``~/.config/Ænglisc Toolkit/projects`` directory.
     - If the platform is not supported, raise a ValueError.
 
     Returns:
@@ -38,17 +38,17 @@ def get_project_db_path() -> Path:
         msg = f"Unsupported platform: {sys.platform}"
         raise ValueError(msg)
     if sys.platform == "win32":
-        db_path = Path.home() / "AppData" / "Local" / "oe_annotator" / "projects"
+        db_path = Path.home() / "AppData" / "Local" / "Ænglisc Toolkit" / "projects"
     elif sys.platform == "darwin":
         db_path = (
             Path.home()
             / "Library"
             / "Application Support"
-            / "oe_annotator"
+            / "Ænglisc Toolkit"
             / "projects"
         )
     elif sys.platform == "linux":
-        db_path = Path.home() / ".config" / "oe_annotator" / "projects"
+        db_path = Path.home() / ".config" / "Ænglisc Toolkit" / "projects"
     db_path.mkdir(parents=True, exist_ok=True)
     return db_path / DEFAULT_DB_NAME
 

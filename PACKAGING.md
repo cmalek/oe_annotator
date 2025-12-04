@@ -20,7 +20,7 @@ The following resources are automatically included in the packaged application:
 1. Ensure you're in the project root directory
 2. Activate your virtual environment: `source .venv/bin/activate`
 3. Run the build script: `./build_macos.sh`
-4. The application will be created in `dist/oe_annotator.app`
+4. The application will be created in `dist/Ænglisc Toolkit.app`
 
 ### Creating a DMG (Optional)
 
@@ -35,10 +35,10 @@ create-dmg --volname "Ænglisc Toolkit" \
            --window-pos 200 120 \
            --window-size 800 400 \
            --icon-size 100 \
-           --icon "oe_annotator.app" 200 190 \
-           --hide-extension "oe_annotator.app" \
+           --icon "Ænglisc Toolkit.app" 200 190 \
+           --hide-extension "Ænglisc Toolkit.app" \
            --app-drop-link 600 185 \
-           dist/oe_annotator.dmg \
+           dist/Ænglisc Toolkit.dmg \
            dist/
 ```
 
@@ -47,13 +47,13 @@ create-dmg --volname "Ænglisc Toolkit" \
 1. Ensure you're in the project root directory
 2. Activate your virtual environment: `.venv\Scripts\activate`
 3. Run the build script: `build_windows.bat`
-4. The executable will be created in `dist\oe_annotator.exe`
+4. The executable will be created in `dist\Ænglisc Toolkit.exe`
 
 ## Customizing the Build
 
 ### Modifying the Spec File
 
-The `oe_annotator.spec` file controls the build process. You can:
+The `aenglisc_toolkit.spec` file controls the build process. You can:
 
 - Add an icon: Set `icon='path/to/icon.ico'` (Windows) or `icon='path/to/icon.icns'` (macOS)
 - Enable console output: Set `console=True` for debugging
@@ -65,7 +65,7 @@ The `oe_annotator.spec` file controls the build process. You can:
 After modifying the spec file, rebuild with:
 
 ```bash
-pyinstaller oe_annotator.spec --clean
+pyinstaller aenglisc_toolkit.spec --clean
 ```
 
 ## Troubleshooting

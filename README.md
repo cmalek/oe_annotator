@@ -35,7 +35,7 @@ pip install pyinstaller
 # Build the application
 ./build_macos.sh
 
-# The app will be created in dist/oe_annotator.app
+# The app will be created in dist/Ænglisc Toolkit.app
 ```
 
 #### Windows
@@ -47,12 +47,13 @@ pip install pyinstaller
 REM Build the application
 build_windows.bat
 
-REM The executable will be created in dist\oe_annotator.exe
+REM The executable will be created in dist\Ænglisc Toolkit.exe
 ```
 
 ## Development
 
 This project uses:
+
 - Python 3.14+
 - PySide6 for the GUI
 - SQLite for data storage
@@ -62,4 +63,3 @@ This project uses:
 ## License
 
 [To be determined]
-

@@ -24,14 +24,14 @@ if exist *.spec del /q *.spec
 
 REM Build the application
 echo Building application...
-pyinstaller oe_annotator.spec
+pyinstaller aenglisc_toolkit.spec
 
 REM Check if build succeeded
-if exist "dist\oe_annotator.exe" (
+if exist "dist\Ænglisc Toolkit.exe" (
     echo Application built successfully!
-    echo Location: dist\oe_annotator.exe
+    echo Location: dist\Ænglisc Toolkit.exe
 ) else (
-    echo Build failed - oe_annotator.exe not found
+    echo Build failed - Ænglisc Toolkit.exe not found
     exit /b 1
 )
 

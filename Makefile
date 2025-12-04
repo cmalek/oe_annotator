@@ -24,10 +24,10 @@ dev::
 	exec -a "Ænglisc Toolkit" python -m oeapp.main
 
 destroy-db::
-	rm -f ~/Library/Application\ Support/oe_annotator/projects/*.db
+	rm -f ~/Library/Application\ Support/Ænglisc Toolkit/projects/*.db
 
 show-db::
-	ls -la ~/Library/Application\ Support/oe_annotator/projects/*.db
+	ls -la ~/Library/Application\ Support/Ænglisc Toolkit/projects/*.db
 
 compile:: sync  ## Run sync to update uv.lock, then rebuild requirements.txt (delete first to ensure all updates are applied).
 	rm requirements.txt

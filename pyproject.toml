@@ -1,5 +1,5 @@
 [project]
-name = "oe_annotator"
+name = "aenglisc_toolkit"
 version = "0.1.0"
 description = "A desktop application to assist in translation from Old English/Anglo Saxon to Modern English"
 readme = "README.md"
@@ -52,7 +52,7 @@ test = [
 ]
 
 [project.urls]
-Repository = "https://github.com/cmalek/oe_annotator"
+Repository = "https://github.com/cmalek/aenglisc_toolkit"
 
 [tool.uv]
 python-preference = "only-system"

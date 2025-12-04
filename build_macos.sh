@@ -23,18 +23,18 @@ rm -rf build dist *.spec 2>/dev/null || true
 
 # Build the application
 echo "Building application..."
-pyinstaller oe_annotator.spec
+pyinstaller aenglisc_toolkit.spec
 
 # Create macOS app bundle
-if [ -d "dist/oe_annotator.app" ]; then
+if [ -d "dist/Ænglisc Toolkit.app" ]; then
     echo "Application built successfully!"
-    echo "Location: dist/oe_annotator.app"
+    echo "Location: dist/Ænglisc Toolkit.app"
     echo ""
     echo "To create a DMG, install create-dmg:"
     echo "  brew install create-dmg"
-    echo "  create-dmg --volname 'Ænglisc Toolkit' dist/oe_annotator.dmg dist/"
+    echo "  create-dmg --volname 'Ænglisc Toolkit' dist/Ænglisc Toolkit.dmg dist/"
 else
-    echo "Build failed - oe_annotator.app not found"
+    echo "Build failed - Ænglisc Toolkit.app not found"
     exit 1
 fi
 
