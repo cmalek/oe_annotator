@@ -2,7 +2,9 @@
 
 import ast
 import json
+import logging
 import re
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +20,7 @@ from oeapp import __version__
 from oeapp.db import (
     Base,
     create_engine_with_path,
+    get_project_db_path,
     table_to_model_name,
 )
 from oeapp.exc import (
@@ -29,6 +32,8 @@ from oeapp.exc import (
 
 from .backup import BackupService
 from .mixins import ProjectFoldersMixin
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -55,7 +60,7 @@ class MigrationMetadataService(ProjectFoldersMixin):
     """
     Service for handling migration metadata.
 
-    This handles two files:
+    This handles this JSON file:
 
     - migration_versions.json: This file contains the migration versions and the
       minimum app version required for each migration.
@@ -123,8 +128,7 @@ class MigrationMetadataService(ProjectFoldersMixin):
             min_version: Minimum app version required
 
         """
-        migration_metadata_service = MigrationMetadataService()
-        versions = migration_metadata_service.versions
+        versions = self.versions
         if versions is None:
             versions = {}
         # Remove any existing migration SHA that maps to this version
@@ -139,16 +143,16 @@ class MigrationMetadataService(ProjectFoldersMixin):
 
         # Add the new migration SHA for this version
         versions[revision] = min_version
-        migration_metadata_service.versions = versions
+        self.versions = versions
         if keys_to_remove:
             print(  # noqa: T201
-                f"Updated {migration_metadata_service.MIGRATION_VERSIONS_PATH!s}: "
+                f"Updated {self.MIGRATION_VERSIONS_PATH!s}: "
                 f"Replaced {keys_to_remove} with {revision} for version "
                 f"{min_version}"
             )
         else:
             print(  # noqa: T201
-                f"Updated {migration_metadata_service.MIGRATION_VERSIONS_PATH!s} with "
+                f"Updated {self.MIGRATION_VERSIONS_PATH!s} with "
                 f"{revision}: {min_version}"
             )
 
@@ -521,6 +525,132 @@ class MigrationService(ProjectFoldersMixin):
             current_db_version and str(current_db_version) < str(skip_until_version)
         )
 
+    def has_pending_migrations(self) -> bool:
+        """
+        Check if there are pending migrations by comparing the database version
+        to the expected migration version from migration_versions.json.
+
+        Returns:
+            True if there are pending migrations, False otherwise
+
+        """
+        # Get current database migration version
+        db_version = self.db_migration_version()
+
+        # If database has no version (fresh database), check if migrations exist
+        if db_version is None:
+            # Check if there are any migrations defined
+            head_version = self.code_migration_version()
+            return head_version is not None
+
+        # Get the head migration version (latest)
+        head_version = self.code_migration_version()
+        if head_version is None:
+            return False
+
+        # Get expected migration version from migration_versions.json
+        versions = self.migration_metadata_service.versions
+        if versions is None:
+            # No migration versions file - check if database is behind head
+            return str(db_version) != str(head_version)
+
+        # Find the expected migration revision for the current app version
+        # The versions dict maps: {revision_id: app_version}
+        # We need to find which revision(s) correspond to the current app version
+        expected_revisions = [
+            revision_id
+            for revision_id, app_version in versions.items()
+            if app_version == __version__
+        ]
+
+        # If we found revisions for this app version, check if db matches any of them
+        if expected_revisions:
+            # Check if database version matches any expected revision
+            if str(db_version) in expected_revisions:
+                # Database matches expected version, but check if head is newer
+                return str(db_version) != str(head_version)
+            # Database doesn't match expected version - migrations needed
+            return True
+
+        # No revisions found for current app version
+        # Compare database version to head version
+        return str(db_version) != str(head_version)
+
+    def _get_pre_migration_backup_path(self) -> Path:
+        """
+        Get the path to the pre-migration backup file.
+
+        Returns:
+            Path to the pre-migration backup file
+
+        """
+        db_path = get_project_db_path()
+        return Path(f"{db_path}.pre-migration")
+
+    def _create_pre_migration_backup(self) -> Path:
+        """
+        Create a backup of the database file before migration.
+
+        Returns:
+            Path to the created backup file
+
+        Raises:
+            BackupFailed: If the backup fails
+
+        """
+        db_path = get_project_db_path()
+        backup_path = self._get_pre_migration_backup_path()
+
+        if not db_path.exists():
+            msg = f"Database file does not exist: {db_path}"
+            logger.error(msg)
+            raise BackupFailed(OSError(msg), backup_path)
+
+        try:
+            shutil.copy2(db_path, backup_path)
+            logger.info(f"Created pre-migration backup: {backup_path}")
+        except (OSError, PermissionError) as e:
+            logger.exception("Failed to create pre-migration backup")
+            raise BackupFailed(e, backup_path) from e
+
+        return backup_path
+
+    def _restore_pre_migration_backup(self) -> None:
+        """
+        Restore the database from the pre-migration backup file.
+
+        Raises:
+            BackupFailed: If the restore fails
+
+        """
+        db_path = get_project_db_path()
+        backup_path = self._get_pre_migration_backup_path()
+
+        if not backup_path.exists():
+            msg = f"Pre-migration backup file does not exist: {backup_path}"
+            logger.error(msg)
+            raise BackupFailed(OSError(msg), backup_path)
+
+        try:
+            shutil.copy2(backup_path, db_path)
+            logger.info(f"Restored database from pre-migration backup: {backup_path}")
+        except (OSError, PermissionError) as e:
+            logger.exception("Failed to restore pre-migration backup")
+            raise BackupFailed(e, backup_path) from e
+
+    def _delete_pre_migration_backup(self) -> None:
+        """
+        Delete the pre-migration backup file.
+
+        """
+        backup_path = self._get_pre_migration_backup_path()
+        if backup_path.exists():
+            try:
+                backup_path.unlink()
+                logger.info(f"Deleted pre-migration backup: {backup_path}")
+            except (OSError, PermissionError) as e:
+                logger.warning(f"Failed to delete pre-migration backup: {e}")
+
     def restore(self, backup_path: Path) -> tuple[str | None, str | None]:
         """
         Restore the database from a backup after a failed migration
@@ -575,22 +705,51 @@ class MigrationService(ProjectFoldersMixin):
             MigrationSkipped: If the migration is skipped
 
         """
+        # Check for pending migrations
+        if not self.has_pending_migrations():
+            logger.info("No pending migrations found")
+            # Return current migration state
+            db_version = self.db_migration_version()
+            return MigrationResult(
+                app_version=__version__,
+                migration_version=cast("str", db_version) if db_version else "",
+            )
+
         if skip_until_version:
             if self.should_abort(skip_until_version):
                 raise MigrationSkipped(skip_until_version)
 
+        # Create pre-migration backup
         try:
-            backup_path = self.backup_service.create_backup()
+            self._create_pre_migration_backup()
         except BackupFailed as e:
             raise MigrationFailed(e, None, None) from e
+
+        # Apply migrations
         try:
             migration_result = self.apply_migrations()
         except Exception as e:
-            # Migration failed - restore backup if we have one
-            app_version, migration_version = self.restore(backup_path)
+            # Migration failed - restore backup
+            try:
+                self._restore_pre_migration_backup()
+            except BackupFailed:
+                # If restore fails, log it but still raise the original migration error
+                logger.exception("Failed to restore pre-migration backup")
+            # Get backup metadata for error reporting
+            app_version, migration_version = None, None
+            try:
+                # Try to get version info from database after restore
+                db_version = self.db_migration_version()
+                migration_version = db_version
+            except (OSError, ValueError, AttributeError) as version_error:
+                logger.debug(
+                    f"Could not get migration version after restore: {version_error}"
+                )
             raise MigrationFailed(e, app_version, migration_version) from e
-
-        return migration_result
+        else:
+            # Migration succeeded - delete backup
+            self._delete_pre_migration_backup()
+            return migration_result
 
     def apply_migrations(self) -> MigrationResult:
         """
