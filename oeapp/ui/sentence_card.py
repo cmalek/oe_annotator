@@ -637,6 +637,12 @@ class SentenceCard(TokenOccurrenceMixin, QWidget):
         """
         Find the token index that contains the given character position.
 
+        This method works correctly with hyphenated tokens (e.g., "ġe-wāt") because:
+        - The token's surface includes the full hyphenated word including the hyphen
+        - The token_end calculation includes the full surface length
+        - So clicking on any part of the hyphenated word (prefix, hyphen, or main word)
+          will correctly select the entire token
+
         Args:
             text: The full sentence text
             position: Character position in the text

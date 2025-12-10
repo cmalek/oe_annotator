@@ -323,7 +323,7 @@ class Token(Base):
         session.flush()
 
     @classmethod
-    def tokenize(cls, sentence_text: str) -> builtins.list[str]:
+    def tokenize(cls, sentence_text: str) -> builtins.list[str]:  # noqa: PLR0912, PLR0915
         """
         Tokenize a sentence.
 
@@ -339,6 +339,20 @@ class Token(Base):
         tokens = []
         # Use regex to split on whitespace while preserving punctuation
         words = re.split(r"\s+", sentence_text.strip())
+
+        # Build character class for word characters including Old English chars
+        # Escape special regex characters in OE_CHARS
+        oe_chars_escaped = re.escape(cls.OE_CHARS)
+        word_char_class = rf"[\w{oe_chars_escaped}]"
+
+        # Pattern to match hyphenated words: word_chars + hyphen/en-dash/em-dash
+        # + word_chars
+        hyphenated_pattern = rf"{word_char_class}+[-–—]{word_char_class}+"  # noqa: RUF001
+
+        # Pattern for remaining words and punctuation
+        word_pattern = rf"{word_char_class}+"
+        punct_pattern = r'[.,;:!?\-—"\'.]+'
+
         for word in words:
             if not word:
                 continue
@@ -348,23 +362,76 @@ class Token(Base):
             # Check for punctuation-quote combinations (?" ." !") - skip these
             if re.match(r'^[.!?]+["\']+$', word):
                 continue
-            # Split punctuation from words
-            # Match word characters (including Old English chars) and punctuation
-            # separately
-            pattern = rf'[\w{re.escape(cls.OE_CHARS)}]+|[.,;:!?\-—"\'.]+'
-            parts = re.findall(pattern, word)
-            # Filter out quotes and standalone punctuation
-            # Also filter out punctuation-quote combinations
-            filtered_parts = []
-            for part in parts:
-                # Skip standalone punctuation marks
-                if part in [",", ";", ":", "!", "?", "-", "—", '"', "'", "."]:
-                    continue
-                # Skip punctuation-quote combinations (like ?" ." !")
-                if re.match(r'^[.!?]+["\']+$', part):
-                    continue
-                filtered_parts.append(part)
-            tokens.extend(filtered_parts)
+
+            # First, extract hyphenated words
+            hyphenated_matches = list(re.finditer(hyphenated_pattern, word))
+
+            if hyphenated_matches:
+                # Process hyphenated words and remaining text
+                last_end = 0
+                processed_ranges = []
+
+                for match in hyphenated_matches:
+                    # Add any text before this hyphenated word
+                    before_text = word[last_end : match.start()]
+                    if before_text:
+                        # Tokenize the text before the hyphenated word
+                        parts = re.findall(
+                            rf"{word_pattern}|{punct_pattern}", before_text
+                        )
+                        for part in parts:
+                            # Skip commas, colons, semicolons, hyphens, quotes
+                            # (attached punctuation)
+                            if part in [",", ";", ":", "-", "—", '"', "'"]:
+                                continue
+                            # Skip punctuation-quote combinations
+                            if re.match(r'^[.!?]+["\']+$', part):
+                                continue
+                            tokens.append(part)
+
+                    # Add the hyphenated word as a single token
+                    tokens.append(match.group())
+                    processed_ranges.append((match.start(), match.end()))
+                    last_end = match.end()
+
+                # Add any remaining text after the last hyphenated word
+                remaining_text = word[last_end:]
+                if remaining_text:
+                    # Tokenize remaining text, but skip parts that overlap with
+                    # hyphenated words
+                    parts = re.findall(
+                        rf"{word_pattern}|{punct_pattern}", remaining_text
+                    )
+                    for part in parts:
+                        # Skip commas, colons, semicolons, hyphens, quotes
+                        # (attached punctuation)
+                        if part in [",", ";", ":", "-", "—", '"', "'"]:
+                            continue
+                        # Skip punctuation-quote combinations
+                        if re.match(r'^[.!?]+["\']+$', part):
+                            continue
+                        # Check if this part overlaps with any processed hyphenated word
+                        part_start_in_word = word.find(part, last_end)
+                        if part_start_in_word != -1:
+                            part_end_in_word = part_start_in_word + len(part)
+                            overlaps = any(
+                                start < part_end_in_word and end > part_start_in_word
+                                for start, end in processed_ranges
+                            )
+                            if not overlaps:
+                                tokens.append(part)
+            else:
+                # No hyphenated words, use original logic
+                parts = re.findall(rf"{word_pattern}|{punct_pattern}", word)
+                for part in parts:
+                    # Skip commas, colons, semicolons, hyphens, quotes (attached
+                    # punctuation)
+                    if part in [",", ";", ":", "-", "—", '"', "'"]:
+                        continue
+                    # Skip punctuation-quote combinations
+                    if re.match(r'^[.!?]+["\']+$', part):
+                        continue
+                    tokens.append(part)
 
         # Filter out closing punctuation at the end of the token list
         # Remove trailing .!? tokens (even without quotes) - these are closing
