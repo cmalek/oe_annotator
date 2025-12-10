@@ -1101,6 +1101,7 @@ class ToggleParagraphStartCommand(Command):
 
         Returns:
             True if successful, False otherwise
+
         """
         sentence = Sentence.get(self.session, self.sentence_id)
         if sentence is None:
@@ -1152,6 +1153,7 @@ class ToggleParagraphStartCommand(Command):
 
         Args:
             sentences: List of all sentences in project, ordered by display_order
+
         """
         if not sentences:
             return
@@ -1178,6 +1180,7 @@ class ToggleParagraphStartCommand(Command):
 
         Returns:
             True if successful, False otherwise
+
         """
         sentence = Sentence.get(self.session, self.sentence_id)
         if sentence is None:
@@ -1192,7 +1195,9 @@ class ToggleParagraphStartCommand(Command):
             s = Sentence.get(self.session, before_data["id"])
             if s:
                 s.paragraph_number = before_data["paragraph_number"]
-                s.sentence_number_in_paragraph = before_data["sentence_number_in_paragraph"]
+                s.sentence_number_in_paragraph = before_data[
+                    "sentence_number_in_paragraph"
+                ]
                 s.is_paragraph_start = before_data["is_paragraph_start"]
                 self.session.add(s)
 
@@ -1205,6 +1210,7 @@ class ToggleParagraphStartCommand(Command):
 
         Returns:
             Description string
+
         """
         action = "Start paragraph" if self.after_is_paragraph_start else "End paragraph"
         return f"{action} for sentence {self.sentence_id}"

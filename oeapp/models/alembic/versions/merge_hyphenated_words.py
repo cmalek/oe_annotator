@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 # revision identifiers, used by Alembic.
 revision: str = "merge_hyphenated_words"
-down_revision: str | Sequence[str] | None = "fix_check_constraints"
+down_revision: str | Sequence[str] | None = "0d9ebcdd2591"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
