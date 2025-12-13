@@ -87,7 +87,6 @@ def _run_migration(session):
         for hyphenated_word, word_start, word_end in hyphenated_words:
             _merge_tokens_for_hyphenated_word(
                 conn,
-                sentence_id,
                 hyphenated_word,
                 word_start,
                 word_end,

@@ -4,11 +4,26 @@ import unittest
 import time
 from unittest.mock import Mock
 
+from PySide6.QtWidgets import QApplication
+
 from oeapp.services.autosave import AutosaveService
 
 
 class TestAutosaveService(unittest.TestCase):
     """Test cases for AutosaveService."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up QApplication for all tests."""
+        cls.app = QApplication.instance()
+        if cls.app is None:
+            cls.app = QApplication([])
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up QApplication after all tests."""
+        if cls.app:
+            cls.app.quit()
 
     def test_debounce_single_call(self):
         """Test that a single trigger call results in one save_now call."""
@@ -17,8 +32,11 @@ class TestAutosaveService(unittest.TestCase):
 
         service.trigger()
 
-        # Wait for debounce to complete
-        time.sleep(0.15)
+        # Wait for debounce to complete and process Qt events
+        start_time = time.time()
+        while time.time() - start_time < 0.15:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         # Verify save was called exactly once
         save_callback.assert_called_once()
@@ -30,15 +48,22 @@ class TestAutosaveService(unittest.TestCase):
 
         # Trigger multiple times in quick succession
         service.trigger()
+        self.app.processEvents()
         time.sleep(0.02)
         service.trigger()
+        self.app.processEvents()
         time.sleep(0.02)
         service.trigger()
+        self.app.processEvents()
         time.sleep(0.02)
         service.trigger()
+        self.app.processEvents()
 
-        # Wait for debounce to complete
-        time.sleep(0.12)
+        # Wait for debounce to complete and process Qt events
+        start_time = time.time()
+        while time.time() - start_time < 0.12:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         # Verify save was called exactly once despite 4 triggers
         save_callback.assert_called_once()
@@ -50,11 +75,19 @@ class TestAutosaveService(unittest.TestCase):
 
         # First trigger
         service.trigger()
-        time.sleep(0.07)  # Wait for first debounce to complete
+        # Wait for first debounce to complete and process Qt events
+        start_time = time.time()
+        while time.time() - start_time < 0.07:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         # Second trigger after first one completed
         service.trigger()
-        time.sleep(0.07)  # Wait for second debounce to complete
+        # Wait for second debounce to complete and process Qt events
+        start_time = time.time()
+        while time.time() - start_time < 0.07:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         # Verify save was called twice
         self.assertEqual(save_callback.call_count, 2)
@@ -77,13 +110,17 @@ class TestAutosaveService(unittest.TestCase):
 
         # Trigger (will wait 100ms)
         service.trigger()
+        self.app.processEvents()
 
         # Call save_now immediately (should cancel pending trigger)
         time.sleep(0.02)
         service.save_now()
 
-        # Wait to ensure no additional call happens
-        time.sleep(0.12)
+        # Wait to ensure no additional call happens and process Qt events
+        start_time = time.time()
+        while time.time() - start_time < 0.12:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         # Verify save was called only once (by save_now, not by trigger)
         save_callback.assert_called_once()
@@ -95,13 +132,17 @@ class TestAutosaveService(unittest.TestCase):
 
         # Trigger
         service.trigger()
+        self.app.processEvents()
 
         # Cancel before debounce completes
         time.sleep(0.02)
         service.cancel()
 
-        # Wait to ensure no call happens
-        time.sleep(0.12)
+        # Wait to ensure no call happens and process Qt events
+        start_time = time.time()
+        while time.time() - start_time < 0.12:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         # Verify save was never called
         save_callback.assert_not_called()
@@ -113,21 +154,32 @@ class TestAutosaveService(unittest.TestCase):
 
         # First burst of triggers
         service.trigger()
+        self.app.processEvents()
         time.sleep(0.01)
         service.trigger()
+        self.app.processEvents()
         time.sleep(0.01)
         service.trigger()
+        self.app.processEvents()
 
-        # Wait for first debounce to complete
-        time.sleep(0.07)
+        # Wait for first debounce to complete and process Qt events
+        start_time = time.time()
+        while time.time() - start_time < 0.07:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         # Second burst of triggers
         service.trigger()
+        self.app.processEvents()
         time.sleep(0.01)
         service.trigger()
+        self.app.processEvents()
 
-        # Wait for second debounce to complete
-        time.sleep(0.07)
+        # Wait for second debounce to complete and process Qt events
+        start_time = time.time()
+        while time.time() - start_time < 0.07:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         # Should have exactly 2 saves (one for each burst)
         self.assertEqual(save_callback.call_count, 2)
@@ -139,11 +191,19 @@ class TestAutosaveService(unittest.TestCase):
 
         # First trigger (will fail)
         service.trigger()
-        time.sleep(0.07)
+        # Wait for debounce to complete and process Qt events
+        start_time = time.time()
+        while time.time() - start_time < 0.07:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         # Second trigger (should succeed)
         service.trigger()
-        time.sleep(0.07)
+        # Wait for debounce to complete and process Qt events
+        start_time = time.time()
+        while time.time() - start_time < 0.07:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         # Verify both attempts were made
         self.assertEqual(save_callback.call_count, 2)
@@ -157,8 +217,10 @@ class TestAutosaveService(unittest.TestCase):
         start_time = time.time()
         service.trigger()
 
-        # Wait for completion
-        time.sleep(0.12)
+        # Wait for completion and process Qt events
+        while time.time() - start_time < 0.12:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         elapsed = time.time() - start_time
 
@@ -176,13 +238,17 @@ class TestAutosaveService(unittest.TestCase):
 
         # Start a trigger
         service.trigger()
+        self.app.processEvents()
         time.sleep(0.05)
 
         # Call save_now while trigger is pending
         service.save_now()
 
-        # Wait to ensure trigger doesn't fire
-        time.sleep(0.08)
+        # Wait to ensure trigger doesn't fire and process Qt events
+        start_time = time.time()
+        while time.time() - start_time < 0.08:
+            self.app.processEvents()
+            time.sleep(0.01)
 
         # Should only have one call (from save_now)
         save_callback.assert_called_once()
