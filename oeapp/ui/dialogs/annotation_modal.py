@@ -29,7 +29,6 @@ from oeapp.ui.dialogs.annotation_preset_management import (
     CLEAR_SENTINEL,
     AnnotationPresetManagementDialog,
 )
-from oeapp.ui.main_window import MainWindow
 from oeapp.ui.mixins import AnnotationLookupsMixin
 
 if TYPE_CHECKING:
@@ -720,6 +719,9 @@ class AnnotationModal(AnnotationLookupsMixin, QDialog):
         Open preset management dialog in save mode with current form values
         preloaded.
         """
+        # We need this here to avoid circular import
+        from oeapp.ui.main_window import MainWindow  # noqa: PLC0415
+
         pos = self.PART_OF_SPEECH_REVERSE_MAP.get(self.pos_combo.currentText())
         if not pos or pos not in ("N", "V", "A", "R", "D"):
             return
