@@ -3,6 +3,7 @@
 import os
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from PySide6.QtWidgets import QApplication
@@ -15,6 +16,7 @@ from oeapp.db import Base
 from oeapp.models.project import Project
 from oeapp.models.sentence import Sentence
 from oeapp.models.token import Token
+from oeapp.services.migration import MigrationService, MigrationMetadataService
 
 
 @pytest.fixture(scope="session")
@@ -162,4 +164,20 @@ def create_test_token(session, sentence_id, surface="cyning", order_index=0, lem
     session.add(token)
     session.commit()
     return token
+
+
+@pytest.fixture
+def mock_migration_services():
+    """Create mocked migration services for tests that need ProjectImporter."""
+    mock_backup = MagicMock()
+    mock_engine = MagicMock()
+    mock_metadata = MagicMock()
+    
+    migration_service = MigrationService(
+        backup_service=mock_backup,
+        engine=mock_engine,
+        migration_metadata_service=mock_metadata
+    )
+    
+    return migration_service, mock_metadata
 

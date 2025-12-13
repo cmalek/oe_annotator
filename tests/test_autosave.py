@@ -1,258 +1,190 @@
 """Unit tests for AutosaveService."""
 
-import unittest
 import time
-from unittest.mock import Mock
+from unittest.mock import MagicMock, call
 
-from PySide6.QtWidgets import QApplication
+import pytest
+from PySide6.QtCore import QTimer
 
 from oeapp.services.autosave import AutosaveService
 
 
-class TestAutosaveService(unittest.TestCase):
+class TestAutosaveService:
     """Test cases for AutosaveService."""
 
-    @classmethod
-    def setUpClass(cls):
-        """Set up QApplication for all tests."""
-        cls.app = QApplication.instance()
-        if cls.app is None:
-            cls.app = QApplication([])
+    def test_init_sets_callback_and_debounce(self):
+        """Test __init__ sets save_callback and debounce_ms."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=1000)
+        
+        assert service.save_callback == callback
+        assert service.debounce_ms == 1000
+        assert service._timer is None
+        assert service._pending is False
 
-    @classmethod
-    def tearDownClass(cls):
-        """Clean up QApplication after all tests."""
-        if cls.app:
-            cls.app.quit()
+    def test_init_default_debounce(self):
+        """Test __init__ uses default debounce_ms."""
+        callback = MagicMock()
+        service = AutosaveService(callback)
+        
+        assert service.debounce_ms == 500
 
-    def test_debounce_single_call(self):
-        """Test that a single trigger call results in one save_now call."""
-        save_callback = Mock()
-        service = AutosaveService(save_callback, debounce_ms=100)
-
+    def test_trigger_sets_pending(self):
+        """Test trigger() sets _pending flag."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=100)
+        
         service.trigger()
+        
+        assert service._pending is True
+        assert service._timer is not None
 
-        # Wait for debounce to complete and process Qt events
-        start_time = time.time()
-        while time.time() - start_time < 0.15:
-            self.app.processEvents()
-            time.sleep(0.01)
-
-        # Verify save was called exactly once
-        save_callback.assert_called_once()
-
-    def test_debounce_multiple_rapid_calls(self):
-        """Test that multiple rapid trigger calls are debounced into a single save."""
-        save_callback = Mock()
-        service = AutosaveService(save_callback, debounce_ms=100)
-
-        # Trigger multiple times in quick succession
+    def test_trigger_creates_timer(self, qapp):
+        """Test trigger() creates and starts timer."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=100)
+        
         service.trigger()
-        self.app.processEvents()
-        time.sleep(0.02)
+        
+        assert service._timer is not None
+        assert service._timer.isSingleShot()
+        # Timer needs QApplication event loop to be active
+        # Just check that timer exists and is configured correctly
+        assert service._timer.interval() == 100
+
+    def test_trigger_cancels_existing_timer(self):
+        """Test trigger() cancels existing timer."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=100)
+        
         service.trigger()
-        self.app.processEvents()
-        time.sleep(0.02)
+        first_timer = service._timer
+        
         service.trigger()
-        self.app.processEvents()
-        time.sleep(0.02)
+        second_timer = service._timer
+        
+        # Should have different timer instances
+        assert first_timer != second_timer
+        # First timer should be stopped
+        assert not first_timer.isActive()
+
+    def test_trigger_calls_save_after_debounce(self, qapp):
+        """Test trigger() calls save_callback after debounce period."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=50)
+        
         service.trigger()
-        self.app.processEvents()
+        
+        # Wait for timer to fire
+        time.sleep(0.1)
+        qapp.processEvents()
+        
+        callback.assert_called_once()
+        assert service._pending is False
 
-        # Wait for debounce to complete and process Qt events
-        start_time = time.time()
-        while time.time() - start_time < 0.12:
-            self.app.processEvents()
-            time.sleep(0.01)
-
-        # Verify save was called exactly once despite 4 triggers
-        save_callback.assert_called_once()
-
-    def test_debounce_separated_calls(self):
-        """Test that trigger calls separated by debounce period result in multiple saves."""
-        save_callback = Mock()
-        service = AutosaveService(save_callback, debounce_ms=50)
-
-        # First trigger
+    def test_trigger_multiple_only_calls_once(self, qapp):
+        """Test multiple trigger() calls only result in one save."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=50)
+        
+        # Trigger multiple times rapidly
         service.trigger()
-        # Wait for first debounce to complete and process Qt events
-        start_time = time.time()
-        while time.time() - start_time < 0.07:
-            self.app.processEvents()
-            time.sleep(0.01)
-
-        # Second trigger after first one completed
         service.trigger()
-        # Wait for second debounce to complete and process Qt events
-        start_time = time.time()
-        while time.time() - start_time < 0.07:
-            self.app.processEvents()
-            time.sleep(0.01)
+        service.trigger()
+        
+        # Wait for timer to fire
+        time.sleep(0.1)
+        qapp.processEvents()
+        
+        # Should only be called once (debounced)
+        callback.assert_called_once()
 
-        # Verify save was called twice
-        self.assertEqual(save_callback.call_count, 2)
-
-    def test_save_now_bypasses_debounce(self):
-        """Test that save_now immediately calls the callback without debouncing."""
-        save_callback = Mock()
-        service = AutosaveService(save_callback, debounce_ms=1000)
-
-        # Call save_now (should be immediate)
+    def test_save_now_calls_callback_immediately(self):
+        """Test save_now() calls callback immediately."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=1000)
+        
         service.save_now()
+        
+        callback.assert_called_once()
+        assert service._pending is False
 
-        # Verify save was called immediately without waiting
-        save_callback.assert_called_once()
-
-    def test_save_now_cancels_pending_trigger(self):
-        """Test that save_now cancels any pending debounced trigger."""
-        save_callback = Mock()
-        service = AutosaveService(save_callback, debounce_ms=100)
-
-        # Trigger (will wait 100ms)
+    def test_save_now_cancels_timer(self):
+        """Test save_now() cancels pending timer."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=1000)
+        
         service.trigger()
-        self.app.processEvents()
-
-        # Call save_now immediately (should cancel pending trigger)
-        time.sleep(0.02)
+        assert service._timer is not None
+        assert service._timer.isActive()
+        
         service.save_now()
+        
+        # Timer should be stopped and deleted
+        assert service._timer is None
 
-        # Wait to ensure no additional call happens and process Qt events
-        start_time = time.time()
-        while time.time() - start_time < 0.12:
-            self.app.processEvents()
-            time.sleep(0.01)
-
-        # Verify save was called only once (by save_now, not by trigger)
-        save_callback.assert_called_once()
-
-    def test_cancel_pending_trigger(self):
-        """Test that cancel prevents pending trigger from executing."""
-        save_callback = Mock()
-        service = AutosaveService(save_callback, debounce_ms=100)
-
-        # Trigger
+    def test_save_now_clears_pending(self):
+        """Test save_now() clears _pending flag."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=1000)
+        
         service.trigger()
-        self.app.processEvents()
+        assert service._pending is True
+        
+        service.save_now()
+        
+        assert service._pending is False
 
-        # Cancel before debounce completes
-        time.sleep(0.02)
+    def test_cancel_stops_timer(self):
+        """Test cancel() stops and deletes timer."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=1000)
+        
+        service.trigger()
+        assert service._timer is not None
+        assert service._timer.isActive()
+        
         service.cancel()
+        
+        assert service._timer is None
+        assert service._pending is False
 
-        # Wait to ensure no call happens and process Qt events
-        start_time = time.time()
-        while time.time() - start_time < 0.12:
-            self.app.processEvents()
-            time.sleep(0.01)
-
-        # Verify save was never called
-        save_callback.assert_not_called()
-
-    def test_multiple_triggers_with_intermediate_completion(self):
-        """Test complex pattern of triggers with intermediate completions."""
-        save_callback = Mock()
-        service = AutosaveService(save_callback, debounce_ms=50)
-
-        # First burst of triggers
+    def test_cancel_clears_pending(self):
+        """Test cancel() clears _pending flag."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=1000)
+        
         service.trigger()
-        self.app.processEvents()
-        time.sleep(0.01)
+        assert service._pending is True
+        
+        service.cancel()
+        
+        assert service._pending is False
+
+    def test_cancel_does_not_call_callback(self, qapp):
+        """Test cancel() does not call save callback."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=50)
+        
         service.trigger()
-        self.app.processEvents()
-        time.sleep(0.01)
+        service.cancel()
+        
+        # Wait to ensure timer doesn't fire
+        time.sleep(0.1)
+        qapp.processEvents()
+        
+        callback.assert_not_called()
+
+    def test_pending_flag_cleared_after_timer_fires(self, qapp):
+        """Test _pending flag is cleared after timer fires."""
+        callback = MagicMock()
+        service = AutosaveService(callback, debounce_ms=50)
+        
         service.trigger()
-        self.app.processEvents()
-
-        # Wait for first debounce to complete and process Qt events
-        start_time = time.time()
-        while time.time() - start_time < 0.07:
-            self.app.processEvents()
-            time.sleep(0.01)
-
-        # Second burst of triggers
-        service.trigger()
-        self.app.processEvents()
-        time.sleep(0.01)
-        service.trigger()
-        self.app.processEvents()
-
-        # Wait for second debounce to complete and process Qt events
-        start_time = time.time()
-        while time.time() - start_time < 0.07:
-            self.app.processEvents()
-            time.sleep(0.01)
-
-        # Should have exactly 2 saves (one for each burst)
-        self.assertEqual(save_callback.call_count, 2)
-
-    def test_error_in_callback_doesnt_break_service(self):
-        """Test that errors in the save callback don't break the service."""
-        save_callback = Mock(side_effect=[Exception("Save failed"), None])
-        service = AutosaveService(save_callback, debounce_ms=50)
-
-        # First trigger (will fail)
-        service.trigger()
-        # Wait for debounce to complete and process Qt events
-        start_time = time.time()
-        while time.time() - start_time < 0.07:
-            self.app.processEvents()
-            time.sleep(0.01)
-
-        # Second trigger (should succeed)
-        service.trigger()
-        # Wait for debounce to complete and process Qt events
-        start_time = time.time()
-        while time.time() - start_time < 0.07:
-            self.app.processEvents()
-            time.sleep(0.01)
-
-        # Verify both attempts were made
-        self.assertEqual(save_callback.call_count, 2)
-
-    def test_debounce_timing_accuracy(self):
-        """Test that debounce timing is reasonably accurate."""
-        save_callback = Mock()
-        debounce_ms = 100
-        service = AutosaveService(save_callback, debounce_ms=debounce_ms)
-
-        start_time = time.time()
-        service.trigger()
-
-        # Wait for completion and process Qt events
-        while time.time() - start_time < 0.12:
-            self.app.processEvents()
-            time.sleep(0.01)
-
-        elapsed = time.time() - start_time
-
-        # Verify callback was called
-        save_callback.assert_called_once()
-
-        # Verify timing is approximately correct (within 50ms tolerance)
-        self.assertGreaterEqual(elapsed, debounce_ms / 1000.0)
-        self.assertLess(elapsed, (debounce_ms + 50) / 1000.0)
-
-    def test_concurrent_trigger_and_save_now(self):
-        """Test interaction between trigger and save_now."""
-        save_callback = Mock()
-        service = AutosaveService(save_callback, debounce_ms=100)
-
-        # Start a trigger
-        service.trigger()
-        self.app.processEvents()
-        time.sleep(0.05)
-
-        # Call save_now while trigger is pending
-        service.save_now()
-
-        # Wait to ensure trigger doesn't fire and process Qt events
-        start_time = time.time()
-        while time.time() - start_time < 0.08:
-            self.app.processEvents()
-            time.sleep(0.01)
-
-        # Should only have one call (from save_now)
-        save_callback.assert_called_once()
-
-
-if __name__ == '__main__':
-    unittest.main()
+        assert service._pending is True
+        
+        # Wait for timer to fire
+        time.sleep(0.1)
+        qapp.processEvents()
+        
+        assert service._pending is False

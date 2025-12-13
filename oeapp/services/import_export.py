@@ -109,17 +109,32 @@ class ProjectExporter:
 class ProjectImporter:
     """Processes project import data and creates database entities."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        migration_service: MigrationService | None = None,
+        migration_metadata_service: MigrationMetadataService | None = None,
+    ) -> None:
         """
         Initialize processor.
 
         Args:
             session: SQLAlchemy session
+            migration_service: Optional MigrationService instance (created if not provided)
+            migration_metadata_service: Optional MigrationMetadataService instance
+                (created if not provided)
 
         """
         self.session = session
-        self.migration_service = MigrationService()
-        self.migration_metadata_service = MigrationMetadataService()
+        # Allow dependency injection for testing, but create defaults for normal use
+        self.migration_service = (
+            migration_service if migration_service is not None else MigrationService()
+        )
+        self.migration_metadata_service = (
+            migration_metadata_service
+            if migration_metadata_service is not None
+            else MigrationMetadataService()
+        )
 
     def _validate_migration_version(self, export_version: str) -> None:
         """

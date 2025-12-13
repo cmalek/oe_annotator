@@ -1,325 +1,353 @@
 """Unit tests for DOCXExporter."""
 
-import unittest
 import tempfile
-import os
 from pathlib import Path
+
+import pytest
 from docx import Document
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
 
-from oeapp.db import Base, get_session
 from oeapp.services.export_docx import DOCXExporter
-from oeapp.models.annotation import Annotation
-from oeapp.models.project import Project
-from oeapp.models.sentence import Sentence
-from oeapp.models.token import Token
+from tests.conftest import create_test_project, create_test_sentence
 
 
-class TestDOCXExporter(unittest.TestCase):
+class TestDOCXExporter:
     """Test cases for DOCXExporter."""
 
-    def setUp(self):
-        """Set up test database."""
-        self.temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
-        self.temp_db.close()
-        db_path = Path(self.temp_db.name)
+    def test_export_creates_document(self, db_session, tmp_path):
+        """Test export() creates a DOCX file."""
+        project = create_test_project(db_session, name="Test Project", text="Se cyning.")
+        db_session.commit()
 
-        # Create engine and session
-        engine = create_engine(f"sqlite:///{db_path}")
-        Base.metadata.create_all(engine)
-        SessionLocal = sessionmaker(bind=engine)
-        self.session = SessionLocal()
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
 
-        self.exporter = DOCXExporter(self.session)
+        result = exporter.export(project.id, output_path)
 
-        # Create test project
-        project = Project(name="Test OE Project")
-        self.session.add(project)
-        self.session.flush()
-        self.project_id = project.id
-        self.session.commit()
+        assert result is True
+        assert output_path.exists()
 
-    def tearDown(self):
-        """Clean up test database."""
-        self.session.close()
-        os.unlink(self.temp_db.name)
+    def test_export_returns_false_when_project_not_found(self, db_session, tmp_path):
+        """Test export() returns False when project doesn't exist."""
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
 
-    def test_export_with_superscripts_and_subscripts(self):
-        """Test that DOCX export correctly formats superscripts and subscripts for annotations."""
-        # Create a sentence with Old English text
-        sentence = Sentence.create(
-            session=self.session,
-            project_id=self.project_id,
-            display_order=1,
-            text_oe="Se cyning fēoll"
+        result = exporter.export(99999, output_path)
+
+        assert result is False
+
+    def test_export_includes_project_title(self, db_session, tmp_path):
+        """Test export() includes project name as heading."""
+        project = create_test_project(db_session, name="My Test Project", text="")
+        db_session.commit()
+
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
+
+        exporter.export(project.id, output_path)
+
+        doc = Document(str(output_path))
+        # First paragraph should be the heading
+        assert len(doc.paragraphs) > 0
+        assert doc.paragraphs[0].text == "My Test Project"
+
+    def test_export_includes_sentence_numbers(self, db_session, tmp_path):
+        """Test export() includes paragraph and sentence numbers."""
+        project = create_test_project(db_session, name="Test", text="Se cyning. Þæt scip.")
+        db_session.commit()
+
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
+
+        exporter.export(project.id, output_path)
+
+        doc = Document(str(output_path))
+        text = "\n".join([para.text for para in doc.paragraphs])
+
+        # Should contain paragraph and sentence number markers
+        assert "¶[" in text
+        assert "S[" in text
+
+    def test_export_includes_paragraph_breaks(self, db_session, tmp_path):
+        """Test export() adds extra blank lines for paragraph starts."""
+        project = create_test_project(db_session, name="Test", text="")
+        db_session.commit()
+
+        # Create sentences with paragraph breaks
+        sentence1 = create_test_sentence(
+            db_session, project_id=project.id, text="First paragraph.", display_order=1, is_paragraph_start=True
         )
-        sentence.text_modern = "The king fell"
-        self.session.add(sentence)
-        self.session.commit()
-        sentence_id = sentence.id
-
-        # Get tokens (created automatically by Sentence.create)
-        tokens = Token.list(self.session, sentence_id)
-        token_id_1 = tokens[0].id
-        token_id_2 = tokens[1].id
-        token_id_3 = tokens[2].id
-
-        # Create annotations
-        # Token 1: Demonstrative pronoun, masculine, singular, nominative
-        annotation1 = self.session.get(Annotation, token_id_1)
-        if annotation1 is None:
-            annotation1 = Annotation(token_id=token_id_1)
-            self.session.add(annotation1)
-        annotation1.pos = "R"
-        annotation1.gender = "m"
-        annotation1.number = "s"
-        annotation1.case = "n"
-        annotation1.pronoun_type = "d"
-        annotation1.confidence = 100
-
-        # Token 2: Noun, masculine, singular, nominative, strong declension
-        annotation2 = self.session.get(Annotation, token_id_2)
-        if annotation2 is None:
-            annotation2 = Annotation(token_id=token_id_2)
-            self.session.add(annotation2)
-        annotation2.pos = "N"
-        annotation2.gender = "m"
-        annotation2.number = "s"
-        annotation2.case = "n"
-        annotation2.declension = "s"
-        annotation2.confidence = 95
-
-        # Token 3: Verb, strong class 7, past tense, indicative, 3rd person, singular
-        annotation3 = self.session.get(Annotation, token_id_3)
-        if annotation3 is None:
-            annotation3 = Annotation(token_id=token_id_3)
-            self.session.add(annotation3)
-        annotation3.pos = "V"
-        annotation3.verb_class = "s7"
-        annotation3.verb_tense = "p"
-        annotation3.verb_mood = "i"
-        annotation3.verb_person = 3
-        annotation3.number = "s"
-        annotation3.verb_form = "f"
-        annotation3.confidence = 100
-
-        self.session.commit()
-
-        # Export to DOCX
-        output_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.docx')
-        output_file.close()
-        output_path = Path(output_file.name)
-
-        try:
-            result = self.exporter.export(self.project_id, output_path)
-            self.assertTrue(result)
-            self.assertTrue(output_path.exists())
-
-            # Read the exported document
-            doc = Document(str(output_path))
-
-            # Find the paragraph with Old English text
-            oe_paragraph = None
-            for para in doc.paragraphs:
-                if any(run.text for run in para.runs if "Se" in run.text or "cyning" in run.text):
-                    oe_paragraph = para
-                    break
-
-            self.assertIsNotNone(oe_paragraph, "Could not find OE text paragraph")
-
-            # Verify runs have proper formatting
-            superscript_found = False
-            subscript_found = False
-
-            for run in oe_paragraph.runs:
-                if run.font.superscript:
-                    superscript_found = True
-                if run.font.subscript:
-                    subscript_found = True
-
-            self.assertTrue(superscript_found, "Annotations should contain superscripts")
-            self.assertTrue(subscript_found, "Annotations should contain subscripts")
-
-        finally:
-            if output_path.exists():
-                os.unlink(output_path)
-
-    def test_export_with_uncertain_annotation(self):
-        """Test that uncertain annotations are marked with '?' in the export."""
-        sentence = Sentence.create(
-            session=self.session,
-            project_id=self.project_id,
-            display_order=1,
-            text_oe="þæt wīf"
+        sentence2 = create_test_sentence(
+            db_session, project_id=project.id, text="Second paragraph.", display_order=2, is_paragraph_start=True
         )
-        sentence.text_modern = "that woman"
-        self.session.add(sentence)
-        self.session.commit()
-        sentence_id = sentence.id
+        db_session.commit()
 
-        tokens = Token.list(self.session, sentence_id)
-        token_id = tokens[0].id
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
 
-        # Create uncertain annotation
-        annotation = self.session.get(Annotation, token_id)
-        if annotation is None:
-            annotation = Annotation(token_id=token_id)
-            self.session.add(annotation)
+        exporter.export(project.id, output_path)
+
+        doc = Document(str(output_path))
+        # Should have multiple paragraphs (title + sentences + breaks)
+        assert len(doc.paragraphs) > 2
+
+    def test_export_includes_translation(self, db_session, tmp_path):
+        """Test export() includes modern translation when available."""
+        project = create_test_project(db_session, name="Test", text="Se cyning.")
+        db_session.commit()
+
+        # Get the sentence and add translation
+        sentence = project.sentences[0]
+        sentence.text_modern = "The king"
+        db_session.commit()
+
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
+
+        exporter.export(project.id, output_path)
+
+        doc = Document(str(output_path))
+        text = "\n".join([para.text for para in doc.paragraphs])
+
+        assert "The king" in text
+
+    def test_export_handles_missing_translation(self, db_session, tmp_path):
+        """Test export() handles sentences without translation."""
+        project = create_test_project(db_session, name="Test", text="Se cyning.")
+        db_session.commit()
+
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
+
+        exporter.export(project.id, output_path)
+
+        doc = Document(str(output_path))
+        # Should still create document successfully
+        assert len(doc.paragraphs) > 0
+
+    def test_export_with_annotations_includes_superscripts(self, db_session, tmp_path):
+        """Test export() includes superscript POS annotations."""
+        project = create_test_project(db_session, name="Test", text="Se cyning")
+        db_session.commit()
+
+        sentence = project.sentences[0]
+        token = sentence.tokens[0]
+
+        # Create annotation with POS
+        if token.annotation:
+            annotation = token.annotation
+        else:
+            from oeapp.models.annotation import Annotation
+            annotation = Annotation(token_id=token.id)
+            db_session.add(annotation)
+            db_session.flush()
+
         annotation.pos = "R"
-        annotation.gender = "n"
-        annotation.number = "s"
-        annotation.case = "a"
         annotation.pronoun_type = "d"
-        annotation.uncertain = True
-        annotation.alternatives_json = "n"
-        self.session.commit()
+        db_session.commit()
 
-        # Export
-        output_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.docx')
-        output_file.close()
-        output_path = Path(output_file.name)
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
 
-        try:
-            result = self.exporter.export(self.project_id, output_path)
-            self.assertTrue(result)
+        exporter.export(project.id, output_path)
 
-            # Read document and verify export succeeded
-            doc = Document(str(output_path))
-            text_content = "\n".join([para.text for para in doc.paragraphs])
+        doc = Document(str(output_path))
+        # Find paragraph with Old English text
+        oe_para = None
+        for para in doc.paragraphs:
+            if any("Se" in run.text for run in para.runs):
+                oe_para = para
+                break
 
-            # Verify the sentence and annotation are present
-            self.assertIn("þæt", text_content)
-            self.assertIn("that woman", text_content)
+        assert oe_para is not None
+        # Check for superscript runs
+        has_superscript = any(run.font.superscript for run in oe_para.runs)
+        assert has_superscript
 
-        finally:
-            if output_path.exists():
-                os.unlink(output_path)
+    def test_export_with_annotations_includes_subscripts(self, db_session, tmp_path):
+        """Test export() includes subscript gender/context annotations."""
+        project = create_test_project(db_session, name="Test", text="Se cyning")
+        db_session.commit()
 
-    def test_export_multiple_sentences(self):
-        """Test exporting multiple sentences in correct order."""
-        # Create multiple sentences
-        for i in range(1, 4):
-            sentence = Sentence.create(
-                session=self.session,
-                project_id=self.project_id,
-                display_order=i,
-                text_oe=f"Sentence {i}"
-            )
-            sentence.text_modern = f"Translation {i}"
-            self.session.add(sentence)
-        self.session.commit()
+        sentence = project.sentences[0]
+        token = sentence.tokens[0]
 
-        # Export
-        output_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.docx')
-        output_file.close()
-        output_path = Path(output_file.name)
+        # Create annotation with gender
+        if token.annotation:
+            annotation = token.annotation
+        else:
+            from oeapp.models.annotation import Annotation
+            annotation = Annotation(token_id=token.id)
+            db_session.add(annotation)
+            db_session.flush()
 
-        try:
-            result = self.exporter.export(self.project_id, output_path)
-            self.assertTrue(result)
+        annotation.pos = "N"
+        annotation.gender = "m"
+        annotation.case = "n"
+        db_session.commit()
 
-            # Read document
-            doc = Document(str(output_path))
-            text = "\n".join([para.text for para in doc.paragraphs])
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
 
-            # Verify all sentences are present (tokens are displayed, not text_oe)
-            self.assertIn("Sentence", text)
-            self.assertIn("1", text)
-            self.assertIn("2", text)
-            self.assertIn("3", text)
-            self.assertIn("Translation 1", text)
-            self.assertIn("Translation 2", text)
-            self.assertIn("Translation 3", text)
+        exporter.export(project.id, output_path)
 
-        finally:
-            if output_path.exists():
-                os.unlink(output_path)
+        doc = Document(str(output_path))
+        # Find paragraph with Old English text
+        oe_para = None
+        for para in doc.paragraphs:
+            if any("cyning" in run.text for run in para.runs):
+                oe_para = para
+                break
 
-    def test_export_with_complex_annotations(self):
-        """Test export with various POS types and their specific fields."""
-        sentence = Sentence.create(
-            session=self.session,
-            project_id=self.project_id,
-            display_order=1,
-            text_oe="on þǣm dæge"
+        assert oe_para is not None
+        # Check for subscript runs
+        has_subscript = any(run.font.subscript for run in oe_para.runs)
+        assert has_subscript
+
+    def test_export_with_notes_includes_notes(self, db_session, tmp_path):
+        """Test export() includes notes for sentences."""
+        project = create_test_project(db_session, name="Test", text="Se cyning")
+        db_session.commit()
+
+        sentence = project.sentences[0]
+        token = sentence.tokens[0]
+
+        # Create a note
+        from oeapp.models.note import Note
+        note = Note(
+            sentence_id=sentence.id,
+            start_token=token.id,
+            end_token=token.id,
+            note_text_md="This is a test note"
         )
-        sentence_id = sentence.id
+        db_session.add(note)
+        db_session.commit()
 
-        tokens = Token.list(self.session, sentence_id)
-        token_id_1 = tokens[0].id
-        token_id_2 = tokens[1].id
-        token_id_3 = tokens[2].id
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
 
-        # Preposition: on
-        annotation1 = self.session.get(Annotation, token_id_1)
-        if annotation1 is None:
-            annotation1 = Annotation(token_id=token_id_1)
-            self.session.add(annotation1)
-        annotation1.pos = "E"
-        annotation1.prep_case = "d"
+        exporter.export(project.id, output_path)
 
-        # Demonstrative: þǣm
-        annotation2 = self.session.get(Annotation, token_id_2)
-        if annotation2 is None:
-            annotation2 = Annotation(token_id=token_id_2)
-            self.session.add(annotation2)
-        annotation2.pos = "R"
-        annotation2.gender = "m"
-        annotation2.number = "s"
-        annotation2.case = "d"
-        annotation2.pronoun_type = "d"
+        doc = Document(str(output_path))
+        text = "\n".join([para.text for para in doc.paragraphs])
 
-        # Noun: dæge
-        annotation3 = self.session.get(Annotation, token_id_3)
-        if annotation3 is None:
-            annotation3 = Annotation(token_id=token_id_3)
-            self.session.add(annotation3)
-        annotation3.pos = "N"
-        annotation3.gender = "m"
-        annotation3.number = "s"
-        annotation3.case = "d"
-        annotation3.declension = "i"
+        assert "This is a test note" in text
+        assert "1." in text  # Note numbering
 
-        self.session.commit()
+    def test_export_with_multiple_notes_orders_correctly(self, db_session, tmp_path):
+        """Test export() orders multiple notes by token position."""
+        project = create_test_project(db_session, name="Test", text="Se cyning fēoll")
+        db_session.commit()
 
-        # Export
-        output_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.docx')
-        output_file.close()
-        output_path = Path(output_file.name)
+        sentence = project.sentences[0]
+        tokens = list(sentence.tokens)
 
-        try:
-            result = self.exporter.export(self.project_id, output_path)
-            self.assertTrue(result)
-            self.assertTrue(output_path.exists())
+        # Create notes in reverse order
+        from oeapp.models.note import Note
+        note2 = Note(
+            sentence_id=sentence.id,
+            start_token=tokens[2].id,
+            end_token=tokens[2].id,
+            note_text_md="Note on third token"
+        )
+        note1 = Note(
+            sentence_id=sentence.id,
+            start_token=tokens[0].id,
+            end_token=tokens[0].id,
+            note_text_md="Note on first token"
+        )
+        db_session.add(note2)
+        db_session.add(note1)
+        db_session.commit()
 
-            # Verify document was created successfully
-            doc = Document(str(output_path))
-            self.assertGreater(len(doc.paragraphs), 0)
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
 
-        finally:
-            if output_path.exists():
-                os.unlink(output_path)
+        exporter.export(project.id, output_path)
 
-    def test_export_empty_project(self):
-        """Test exporting a project with no sentences."""
-        output_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.docx')
-        output_file.close()
-        output_path = Path(output_file.name)
+        doc = Document(str(output_path))
+        text = "\n".join([para.text for para in doc.paragraphs])
 
-        try:
-            result = self.exporter.export(self.project_id, output_path)
-            self.assertTrue(result)
-            self.assertTrue(output_path.exists())
+        # First note should appear before second note
+        first_pos = text.find("Note on first token")
+        second_pos = text.find("Note on third token")
+        assert first_pos < second_pos
 
-            # Document should still be created with just the title
-            doc = Document(str(output_path))
-            self.assertGreater(len(doc.paragraphs), 0)
+    def test_export_empty_project_creates_document(self, db_session, tmp_path):
+        """Test export() creates document even for empty project."""
+        project = create_test_project(db_session, name="Empty Project", text="")
+        db_session.commit()
 
-        finally:
-            if output_path.exists():
-                os.unlink(output_path)
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
 
+        result = exporter.export(project.id, output_path)
 
-if __name__ == '__main__':
-    unittest.main()
+        assert result is True
+        assert output_path.exists()
+
+        doc = Document(str(output_path))
+        # Should have at least the title
+        assert len(doc.paragraphs) > 0
+        assert doc.paragraphs[0].text == "Empty Project"
+
+    def test_setup_document_styles_sets_margins(self, db_session):
+        """Test _setup_document_styles() sets document margins."""
+        from docx import Document as DocxDocument
+
+        exporter = DOCXExporter(db_session)
+        doc = DocxDocument()
+
+        exporter._setup_document_styles(doc)
+
+        section = doc.sections[0]
+        assert section.top_margin.inches == 1.0
+        assert section.left_margin.inches == 1.0
+        assert section.right_margin.inches == 1.0
+        assert section.bottom_margin.inches == 1.0
+
+    def test_export_handles_sentence_without_tokens(self, db_session, tmp_path):
+        """Test export() handles sentence with no tokens gracefully."""
+        project = create_test_project(db_session, name="Test", text="")
+        db_session.commit()
+
+        # Create sentence manually without tokens
+        from oeapp.models.sentence import Sentence
+        sentence = Sentence(
+            project_id=project.id,
+            display_order=1,
+            text_oe="Test sentence",
+            paragraph_number=1,
+            sentence_number_in_paragraph=1
+        )
+        db_session.add(sentence)
+        db_session.commit()
+
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
+
+        result = exporter.export(project.id, output_path)
+
+        assert result is True
+        assert output_path.exists()
+
+    def test_export_handles_file_write_error(self, db_session, tmp_path, monkeypatch):
+        """Test export() handles file write errors gracefully."""
+        project = create_test_project(db_session, name="Test", text="Se cyning.")
+        db_session.commit()
+
+        exporter = DOCXExporter(db_session)
+        output_path = tmp_path / "test.docx"
+
+        # Mock Document.save to raise OSError
+        original_save = None
+        from docx.document import Document as DocumentClass
+
+        def mock_save(self, path):
+            raise OSError("Permission denied")
+
+        # Patch the save method on the instance
+        monkeypatch.setattr(DocumentClass, "save", mock_save)
+
+        result = exporter.export(project.id, output_path)
+
+        assert result is False

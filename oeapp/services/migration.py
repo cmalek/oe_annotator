@@ -8,7 +8,10 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final, cast
+
+if TYPE_CHECKING:
+    from sqlalchemy import Engine
 
 from alembic import command
 from alembic.config import Config
@@ -328,17 +331,30 @@ class MigrationService(ProjectFoldersMixin):
         r'revision\s*:\s*str\s*=\s*["\']([^"\']+)["\']'
     )
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        backup_service: "BackupService | None" = None,
+        engine: "Engine | None" = None,
+        migration_metadata_service: "MigrationMetadataService | None" = None,
+    ) -> None:
         """
         Initialize migration service.
 
         Args:
-            session: SQLAlchemy session
+            backup_service: Optional BackupService instance (created if not provided)
+            engine: Optional SQLAlchemy engine (created if not provided)
+            migration_metadata_service: Optional MigrationMetadataService instance
+                (created if not provided)
 
         """
-        self.backup_service = BackupService()
-        self.engine = create_engine_with_path()
-        self.migration_metadata_service = MigrationMetadataService()
+        # Allow dependency injection for testing, but create defaults for normal use
+        self.backup_service = backup_service if backup_service is not None else BackupService()
+        self.engine = engine if engine is not None else create_engine_with_path()
+        self.migration_metadata_service = (
+            migration_metadata_service
+            if migration_metadata_service is not None
+            else MigrationMetadataService()
+        )
 
     @property
     def config(self) -> Config:
